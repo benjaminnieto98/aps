@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: aps-liga-pes6
+    env: node
+    plan: free
+    buildCommand: cd server && npm install && cd ../client && npm install && npm run build
+    startCommand: node server/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false

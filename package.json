@@ -1,0 +1,11 @@
+{
+  "name": "aps-liga-pes6",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd server && npm install && cd ../client && npm install && npm run build",
+    "start": "node server/index.js",
+    "dev:server": "cd server && node index.js",
+    "dev:client": "cd client && npx vite",
+    "seed": "cd server && node seed.js"
+  }
+}

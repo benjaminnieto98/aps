@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\benja\\\\APS\\\\server\\\\middleware\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\benja\\\\APS\\\\server\\\\routes\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\benja\\\\APS\\\\client\\\\src\\\\pages\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\benja\\\\APS\\\\client\\\\src\\\\components\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\benja\\\\APS\\\\client\\\\src\\\\contexts\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\benja\\\\APS\\\\client\\\\src\\\\utils\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\benja\\\\APS\\\\client\\\\public\" -Force)",
+      "Bash(npm install *)",
+      "PowerShell(Get-ChildItem 'HKLM:\\\\SOFTWARE\\\\WOW6432Node\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Uninstall' -ErrorAction SilentlyContinue | ForEach-Object { $name = $_.GetValue\\(\"DisplayName\"\\); if \\($name -match \"node|Node|nvm|NVM\"\\) { \"$name - $\\($_.GetValue\\('InstallLocation'\\)\\)\" } })",
+      "PowerShell(Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"Set-Location 'C:\\\\Users\\\\benja\\\\APS\\\\server'; node index.js\")",
+      "Bash(node index.js)",
+      "Bash(curl -s http://localhost:3001/api/config)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(curl -s -X POST http://localhost:3001/api/auth/register -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"admin123\",\"adminCode\":\"aps2006\"}')",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(curl -s -X POST http://localhost:3001/api/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin\",\"password\":\"admin123\"}')",
+      "Bash(pkill -f \"node index.js\")",
+      "Read(//mnt/c/Users/benja/APS/**)",
+      "Bash(curl -s http://localhost:3001/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"admin123\"}')",
+      "Bash(curl -s http://localhost:3001/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"testadmin\",\"password\":\"admin123\"}')",
+      "Bash(curl -sv http://localhost:3001/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"testadmin\",\"password\":\"admin123\"}')",
+      "Bash(curl -s http://localhost:3001/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"testadmin\",\"password\":\"test123\"}')",
+      "Bash(curl -s http://localhost:3001/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"testadmin\",\"password\":\"password\"}')",
+      "PowerShell($env:PATH = $env:PATH + \";C:\\\\Program Files\\\\nodejs\"; Set-Location \"C:\\\\Users\\\\benja\\\\APS\\\\server\"; Start-Job -ScriptBlock { Set-Location \"C:\\\\Users\\\\benja\\\\APS\\\\server\"; & \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"index.js\" } | Out-Null; Start-Sleep -Seconds 3; netstat -ano | findstr \"LISTENING\" | findstr \":3001\")"
+    ]
+  }
+}
