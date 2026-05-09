@@ -570,7 +570,8 @@ function ConfigTab() {
   const [config, setConfig] = useState({
     initialBudget: 50000000, priceMultiplier: 1000,
     maxRoster: 22, minRoster: 18, releasePct: 60, adminCode: 'aps2006',
-    posMultGk: 0.8, posMultDef: 0.9, posMultMid: 1.0, posMultFwd: 1.2
+    posMultGk: 0.8, posMultDef: 0.9, posMultMid: 1.0, posMultFwd: 1.2,
+    hideWithoutTeam: false
   })
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
@@ -654,6 +655,27 @@ function ConfigTab() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Visibility options */}
+        <div>
+          <h4 className="text-gray-400 text-sm font-medium mb-3">Visibilidad</h4>
+          <label className="flex items-center gap-3 cursor-pointer select-none w-fit">
+            <div
+              onClick={() => setConfig(prev => ({ ...prev, hideWithoutTeam: !prev.hideWithoutTeam }))}
+              className={`relative w-10 h-5 rounded-full transition-colors ${
+                config.hideWithoutTeam ? 'bg-green-500' : 'bg-gray-600'
+              }`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                config.hideWithoutTeam ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </div>
+            <div>
+              <div className="text-white text-sm">Ocultar jugadores sin equipo</div>
+              <div className="text-gray-500 text-xs">Filtra los jugadores con equipo "without team" del mercado de agentes libres</div>
+            </div>
+          </label>
         </div>
 
         <button

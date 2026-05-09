@@ -4,11 +4,13 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, ratingColor } from '../utils/format'
 
 const STATUS_LABELS = {
-  pending:  { label: 'Pendiente',  color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
-  accepted: { label: 'Aceptada',   color: 'text-green-400 bg-green-400/10 border-green-400/30' },
+  pending:  { label: 'Pendiente',       color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
+  accepted: { label: 'Aceptada',        color: 'text-green-400 bg-green-400/10 border-green-400/30' },
   raised:   { label: 'Cláusula subida', color: 'text-orange-400 bg-orange-400/10 border-orange-400/30' },
-  rejected: { label: 'Rechazada',  color: 'text-red-400 bg-red-400/10 border-red-400/30' },
+  rejected: { label: 'Rechazada',       color: 'text-red-400 bg-red-400/10 border-red-400/30' },
 }
+
+const ALL_POSITIONS = ['GK', 'CB', 'LB', 'CDM', 'CM', 'CAM', 'LW', 'ST']
 
 function PlayerRow({ player, priceField, onBuy, isClause }) {
   return (
@@ -41,10 +43,13 @@ function PlayerRow({ player, priceField, onBuy, isClause }) {
   )
 }
 
+const EMPTY_FILTERS = { search: '', position: '', ovrMin: '', ovrMax: '', priceMin: '', priceMax: '' }
+
 export default function Market() {
   const { user, refreshUser } = useAuth()
   const [tab, setTab] = useState('market')
-  const [search, setSearch] = useState('')
+  const [filters, setFilters] = useState(EMPTY_FILTERS)
+  const [showFilters, setShowFilters] = useState(false)
   const [marketPlayers, setMarketPlayers] = useState([])
   const [clausePlayers, setClausePlayers] = useState([])
   const [freePlayers, setFreePlayers] = useState([])
@@ -70,15 +75,30 @@ export default function Market() {
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
-  const filtered = (list) => {
-    if (!search) return list
-    const q = search.toLowerCase()
-    return list.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      (p.pes_team || '').toLowerCase().includes(q) ||
-      (p.nationality || '').toLowerCase().includes(q)
-    )
+  const setFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: value }))
+
+  const applyFilters = (list, priceField) => {
+    const { search, position, ovrMin, ovrMax, priceMin, priceMax } = filters
+    return list.filter(p => {
+      if (search) {
+        const q = search.toLowerCase()
+        if (
+          !p.name.toLowerCase().includes(q) &&
+          !(p.pes_team || '').toLowerCase().includes(q) &&
+          !(p.nationality || '').toLowerCase().includes(q)
+        ) return false
+      }
+      if (position && p.position !== position) return false
+      if (ovrMin  && p.rating < parseInt(ovrMin))  return false
+      if (ovrMax  && p.rating > parseInt(ovrMax))   return false
+      const price = p[priceField]
+      if (priceMin && price < parseInt(priceMin)) return false
+      if (priceMax && price > parseInt(priceMax)) return false
+      return true
+    })
   }
+
+  const hasActiveFilters = Object.values(filters).some(v => v !== '')
 
   const handleBuy = async () => {
     if (!confirmPlayer) return
@@ -105,20 +125,22 @@ export default function Market() {
   const pendingCount = sentOffers.filter(o => o.status === 'pending').length
 
   const tabs = [
-    { id: 'market',  label: 'En venta',       count: marketPlayers.length },
-    { id: 'clauses', label: 'Cláusulas',       count: clausePlayers.length },
-    { id: 'free',    label: 'Agentes Libres',  count: freePlayers.length },
-    { id: 'offers',  label: 'Mis ofertas',     count: pendingCount, highlight: pendingCount > 0 },
+    { id: 'market',  label: 'En venta',      count: marketPlayers.length },
+    { id: 'clauses', label: 'Cláusulas',      count: clausePlayers.length },
+    { id: 'free',    label: 'Agentes Libres', count: freePlayers.length },
+    { id: 'offers',  label: 'Mis ofertas',    count: pendingCount, highlight: pendingCount > 0 },
   ]
 
+  const priceField = tab === 'market' ? 'listed_price' : tab === 'clauses' ? 'release_clause' : 'price'
   const currentList = tab === 'market' ? marketPlayers : tab === 'clauses' ? clausePlayers : freePlayers
-  const priceField  = tab === 'market' ? 'listed_price' : tab === 'clauses' ? 'release_clause' : 'price'
-
-  const displayList = filtered(currentList).map(p =>
-    tab === 'free' ? { ...p, price: p.rating * p.rating * 1000 } : p
-  )
-
+  const displayList = applyFilters(currentList, priceField)
   const isClauseTab = tab === 'clauses'
+
+  const handleTabChange = (id) => {
+    setTab(id)
+    setFilters(EMPTY_FILTERS)
+    setShowFilters(false)
+  }
 
   return (
     <div className="space-y-6">
@@ -138,7 +160,7 @@ export default function Market() {
         {tabs.map(t => (
           <button
             key={t.id}
-            onClick={() => { setTab(t.id); setSearch('') }}
+            onClick={() => handleTabChange(t.id)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
               tab === t.id ? 'bg-green-500 text-white' : 'text-gray-400 hover:text-white'
             }`}
@@ -156,15 +178,114 @@ export default function Market() {
         ))}
       </div>
 
-      {/* Search (not on offers tab) */}
+      {/* Search + Filter bar */}
       {tab !== 'offers' && (
-        <input
-          type="text"
-          placeholder="Buscar por nombre, equipo o nacionalidad..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-green-500 text-sm"
-        />
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Buscar por nombre, equipo o nacionalidad..."
+              value={filters.search}
+              onChange={e => setFilter('search', e.target.value)}
+              className="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-green-500 text-sm"
+            />
+            <button
+              onClick={() => setShowFilters(v => !v)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
+                showFilters || hasActiveFilters
+                  ? 'bg-green-500/20 border-green-500/50 text-green-400'
+                  : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-600'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+              </svg>
+              Filtros
+              {hasActiveFilters && (
+                <span className="bg-green-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                  {Object.values(filters).filter(v => v !== '').length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Expanded filters */}
+          {showFilters && (
+            <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Position */}
+                <div>
+                  <label className="text-gray-500 text-xs block mb-1.5">Posición</label>
+                  <select
+                    value={filters.position}
+                    onChange={e => setFilter('position', e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
+                  >
+                    <option value="">Todas</option>
+                    {ALL_POSITIONS.map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* OVR range */}
+                <div>
+                  <label className="text-gray-500 text-xs block mb-1.5">Habilidad (OVR)</label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      placeholder="Mín"
+                      min="1" max="99"
+                      value={filters.ovrMin}
+                      onChange={e => setFilter('ovrMin', e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-white text-sm focus:outline-none focus:border-green-500"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Máx"
+                      min="1" max="99"
+                      value={filters.ovrMax}
+                      onChange={e => setFilter('ovrMax', e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-white text-sm focus:outline-none focus:border-green-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Price range */}
+                <div className="col-span-2">
+                  <label className="text-gray-500 text-xs block mb-1.5">Precio</label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      placeholder="Precio mínimo"
+                      min="0"
+                      value={filters.priceMin}
+                      onChange={e => setFilter('priceMin', e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Precio máximo"
+                      min="0"
+                      value={filters.priceMax}
+                      onChange={e => setFilter('priceMax', e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {hasActiveFilters && (
+                <button
+                  onClick={() => setFilters(EMPTY_FILTERS)}
+                  className="text-gray-400 hover:text-white text-xs underline"
+                >
+                  Limpiar todos los filtros
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Clause info banner */}
@@ -180,19 +301,27 @@ export default function Market() {
           {loading ? (
             <div className="text-gray-400 text-center py-12">Cargando...</div>
           ) : displayList.length === 0 ? (
-            <div className="text-gray-500 text-center py-12">No hay jugadores disponibles</div>
-          ) : (
-            <div className="divide-y divide-gray-800/50">
-              {displayList.map(p => (
-                <PlayerRow
-                  key={p.id}
-                  player={p}
-                  priceField={tab === 'free' ? 'price' : priceField}
-                  onBuy={setConfirmPlayer}
-                  isClause={isClauseTab}
-                />
-              ))}
+            <div className="text-gray-500 text-center py-12">
+              {hasActiveFilters ? 'Ningún jugador coincide con los filtros' : 'No hay jugadores disponibles'}
             </div>
+          ) : (
+            <>
+              <div className="px-4 py-2 border-b border-gray-800 text-gray-500 text-xs">
+                {displayList.length} jugador{displayList.length !== 1 ? 'es' : ''}
+                {hasActiveFilters && ` (filtrado de ${currentList.length})`}
+              </div>
+              <div className="divide-y divide-gray-800/50">
+                {displayList.map(p => (
+                  <PlayerRow
+                    key={p.id}
+                    player={p}
+                    priceField={priceField}
+                    onBuy={setConfirmPlayer}
+                    isClause={isClauseTab}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -260,11 +389,7 @@ export default function Market() {
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">{isClauseTab ? 'Cláusula' : 'Precio'}</span>
                 <span className="text-green-400 font-bold">
-                  {formatMoney(
-                    tab === 'market' ? confirmPlayer.listed_price :
-                    tab === 'clauses' ? confirmPlayer.release_clause :
-                    confirmPlayer.price
-                  )}
+                  {formatMoney(confirmPlayer[priceField])}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
@@ -274,16 +399,9 @@ export default function Market() {
               <div className="border-t border-gray-700 mt-2 pt-2 flex justify-between text-sm">
                 <span className="text-gray-400">Saldo restante</span>
                 <span className={`font-bold ${
-                  (user?.budget || 0) - (tab === 'market' ? confirmPlayer.listed_price : tab === 'clauses' ? confirmPlayer.release_clause : confirmPlayer.price) < 0
-                    ? 'text-red-400' : 'text-white'
+                  (user?.budget || 0) - (confirmPlayer[priceField] || 0) < 0 ? 'text-red-400' : 'text-white'
                 }`}>
-                  {formatMoney(
-                    (user?.budget || 0) - (
-                      tab === 'market' ? confirmPlayer.listed_price :
-                      tab === 'clauses' ? confirmPlayer.release_clause :
-                      confirmPlayer.price
-                    )
-                  )}
+                  {formatMoney((user?.budget || 0) - (confirmPlayer[priceField] || 0))}
                 </span>
               </div>
             </div>

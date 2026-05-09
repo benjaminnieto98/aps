@@ -78,13 +78,31 @@ router.get('/clauses', authenticate, async (req, res) => {
 // GET /api/players/free
 router.get('/free', async (req, res) => {
   try {
+    const { rows: cfgRows } = await pool.query(
+      "SELECT key, value FROM config WHERE key IN ('price_multiplier','pos_mult_gk','pos_mult_def','pos_mult_mid','pos_mult_fwd','hide_without_team')"
+    );
+    const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]));
+    const base = parseInt(cfg.price_multiplier || '1000', 10);
+    const hideWithout = cfg.hide_without_team === '1';
+
+    const whereExtra = hideWithout
+      ? `AND p.pes_team IS NOT NULL AND p.pes_team != '' AND p.pes_team NOT ILIKE 'without%team%'`
+      : '';
+
     const { rows } = await pool.query(`
       SELECT p.*, NULL as owner_username
       FROM players p
-      WHERE p.owner_id IS NULL
+      WHERE p.owner_id IS NULL ${whereExtra}
       ORDER BY p.rating DESC
     `);
-    res.json(rows);
+
+    const playersWithPrice = rows.map(p => {
+      const group = POSITION_GROUP[p.position] || 'mid';
+      const posMult = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
+      return { ...p, price: Math.round(p.rating * p.rating * base * posMult) };
+    });
+
+    res.json(playersWithPrice);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });
