@@ -24,7 +24,13 @@
       "Bash(curl -sv http://localhost:3001/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"testadmin\",\"password\":\"admin123\"}')",
       "Bash(curl -s http://localhost:3001/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"testadmin\",\"password\":\"test123\"}')",
       "Bash(curl -s http://localhost:3001/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"testadmin\",\"password\":\"password\"}')",
-      "PowerShell($env:PATH = $env:PATH + \";C:\\\\Program Files\\\\nodejs\"; Set-Location \"C:\\\\Users\\\\benja\\\\APS\\\\server\"; Start-Job -ScriptBlock { Set-Location \"C:\\\\Users\\\\benja\\\\APS\\\\server\"; & \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"index.js\" } | Out-Null; Start-Sleep -Seconds 3; netstat -ano | findstr \"LISTENING\" | findstr \":3001\")"
+      "PowerShell($env:PATH = $env:PATH + \";C:\\\\Program Files\\\\nodejs\"; Set-Location \"C:\\\\Users\\\\benja\\\\APS\\\\server\"; Start-Job -ScriptBlock { Set-Location \"C:\\\\Users\\\\benja\\\\APS\\\\server\"; & \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"index.js\" } | Out-Null; Start-Sleep -Seconds 3; netstat -ano | findstr \"LISTENING\" | findstr \":3001\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh repo *)",
+      "Bash(gh pr *)",
+      "Bash(where gh *)"
     ]
   }
 }
