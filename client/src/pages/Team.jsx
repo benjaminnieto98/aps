@@ -1,108 +1,78 @@
 import React, { useState, useEffect } from 'react'
-import { getMyPlayers, listPlayer, unlistPlayer, setClause, removeClause, releasePlayer, getConfig, getReceivedOffers, acceptOffer, raiseClauseOffer, rejectOffer } from '../api'
+import { getMyPlayers, listPlayer, unlistPlayer, setClause, removeClause, releasePlayer, getPublicConfig, getReceivedOffers, acceptOffer, raiseClauseOffer, rejectOffer } from '../api'
 import { formatMoney, positionOrder, positionLabel, ratingColor } from '../utils/format'
 
-// Position → group mapping (mirrors server logic)
-const POSITION_GROUP = {
-  GK: 'gk', CB: 'def', LB: 'def',
-  CDM: 'mid', CM: 'mid', CAM: 'mid',
-  LW: 'fwd', ST: 'fwd'
-}
-
-function calcPrice(player, config) {
-  if (!config) return null
-  const group = POSITION_GROUP[player.position] || 'mid'
-  const multKey = { gk: 'posMultGk', def: 'posMultDef', mid: 'posMultMid', fwd: 'posMultFwd' }[group]
-  const posMult = parseFloat(config[multKey] ?? 1)
-  return Math.round(player.rating * player.rating * config.priceMultiplier * posMult)
-}
-
 function PlayerCard({ player, onRefresh, config, rosterCount, minRoster }) {
-  const [showListModal, setShowListModal] = useState(false)
-  const [showClauseModal, setShowClauseModal] = useState(false)
+  const [showListModal, setShowListModal]       = useState(false)
+  const [showClauseModal, setShowClauseModal]   = useState(false)
   const [showReleaseModal, setShowReleaseModal] = useState(false)
-  const [price, setPrice] = useState('')
-  const [clauseAmount, setClauseAmount] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [listPrice, setListPrice]     = useState('')
+  const [newClause, setNewClause]     = useState('')
+  const [loading, setLoading]         = useState(false)
+  const [error, setError]             = useState('')
+  const [clauseSuccess, setClauseSuccess] = useState('')
 
-  const basePrice = calcPrice(player, config)
+  // base_price comes from the server (includes position multiplier)
+  const basePrice     = player.base_price ?? null
+  const effectiveClause = player.release_clause ?? basePrice     // what buyers see
+  const clauseRaised  = player.release_clause && basePrice && player.release_clause > basePrice
   const releasePayout = basePrice && config ? Math.round(basePrice * config.releasePct / 100) : null
-  const atMinRoster = rosterCount <= minRoster
+  const atMinRoster   = rosterCount <= minRoster
+
+  // Live cost preview for the raise-clause modal
+  const parsedNew  = parseInt(newClause) || 0
+  const clauseCost = parsedNew > 0 && effectiveClause ? Math.max(0, parsedNew - effectiveClause) : 0
 
   const handleList = async () => {
-    if (!price || isNaN(price) || Number(price) <= 0) return setError('Precio inválido')
-    setLoading(true)
-    setError('')
+    if (!listPrice || isNaN(listPrice) || Number(listPrice) <= 0) return setError('Precio inválido')
+    setLoading(true); setError('')
     try {
-      await listPlayer(player.id, parseInt(price))
-      setShowListModal(false)
-      setPrice('')
-      onRefresh()
-    } catch (err) {
-      setError(err.response?.data?.error || 'Error')
-    } finally {
-      setLoading(false)
-    }
+      await listPlayer(player.id, parseInt(listPrice))
+      setShowListModal(false); setListPrice(''); onRefresh()
+    } catch (err) { setError(err.response?.data?.error || 'Error') }
+    finally { setLoading(false) }
   }
 
   const handleUnlist = async () => {
     setLoading(true)
-    try {
-      await unlistPlayer(player.id)
-      onRefresh()
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
+    try { await unlistPlayer(player.id); onRefresh() }
+    catch (err) { console.error(err) }
+    finally { setLoading(false) }
   }
 
-  const handleSetClause = async () => {
-    if (!clauseAmount || isNaN(clauseAmount) || Number(clauseAmount) <= 0) return setError('Monto inválido')
-    setLoading(true)
-    setError('')
+  const handleRaiseClause = async () => {
+    if (!newClause || isNaN(newClause) || parsedNew <= 0) return setError('Monto inválido')
+    setLoading(true); setError('')
     try {
-      await setClause(player.id, parseInt(clauseAmount))
-      setShowClauseModal(false)
-      setClauseAmount('')
+      const res = await setClause(player.id, parsedNew)
+      setClauseSuccess(`Cláusula subida a ${formatMoney(res.data.newClause)}. Pagaste ${formatMoney(res.data.paid)}.`)
+      setShowClauseModal(false); setNewClause('')
       onRefresh()
-    } catch (err) {
-      setError(err.response?.data?.error || 'Error')
-    } finally {
-      setLoading(false)
-    }
+      setTimeout(() => setClauseSuccess(''), 5000)
+    } catch (err) { setError(err.response?.data?.error || 'Error') }
+    finally { setLoading(false) }
   }
 
-  const handleRemoveClause = async () => {
+  const handleResetClause = async () => {
     setLoading(true)
-    try {
-      await removeClause(player.id)
-      onRefresh()
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
+    try { await removeClause(player.id); onRefresh() }
+    catch (err) { console.error(err) }
+    finally { setLoading(false) }
   }
 
   const handleRelease = async () => {
-    setLoading(true)
-    setError('')
+    setLoading(true); setError('')
     try {
       await releasePlayer(player.id)
-      setShowReleaseModal(false)
-      onRefresh()
-    } catch (err) {
-      setError(err.response?.data?.error || 'Error')
-    } finally {
-      setLoading(false)
-    }
+      setShowReleaseModal(false); onRefresh()
+    } catch (err) { setError(err.response?.data?.error || 'Error') }
+    finally { setLoading(false) }
   }
 
   return (
     <div className="bg-gray-800 rounded-xl p-3 border border-gray-700 hover:border-gray-600 transition-colors">
-      <div className="flex items-start justify-between mb-2">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-1">
         <div className="flex-1 min-w-0">
           <div className="text-white font-semibold text-sm truncate">{player.name}</div>
           <div className="text-gray-400 text-xs">{player.nationality}</div>
@@ -110,28 +80,41 @@ function PlayerCard({ player, onRefresh, config, rosterCount, minRoster }) {
         <div className={`text-lg font-bold ml-2 ${ratingColor(player.rating)}`}>{player.rating}</div>
       </div>
 
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-2.5">
         <span className="bg-gray-700 text-gray-300 text-xs px-2 py-0.5 rounded font-medium">
           {player.position}
         </span>
         <span className="text-gray-500 text-xs">{player.foot === 'Right' ? 'D' : player.foot === 'Left' ? 'I' : 'A'}</span>
       </div>
 
-      {(player.listed_price || player.release_clause) && (
-        <div className="mb-2 space-y-1">
-          {player.listed_price && (
-            <div className="text-xs text-blue-400">
-              En venta: {formatMoney(player.listed_price)}
-            </div>
-          )}
-          {player.release_clause && (
-            <div className="text-xs text-orange-400">
-              Cláusula: {formatMoney(player.release_clause)}
-            </div>
-          )}
+      {/* Price + clause block — always visible */}
+      <div className="bg-gray-900/60 rounded-lg px-2.5 py-2 mb-2.5 space-y-1">
+        <div className="flex justify-between items-center">
+          <span className="text-gray-500 text-xs">Valor base</span>
+          <span className="text-white text-xs font-semibold">{basePrice ? formatMoney(basePrice) : '—'}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-gray-500 text-xs">Cláusula</span>
+          <span className={`text-xs font-bold ${clauseRaised ? 'text-orange-400' : 'text-green-400'}`}>
+            {effectiveClause ? formatMoney(effectiveClause) : '—'}
+            {clauseRaised && <span className="text-gray-500 font-normal ml-1">(subida)</span>}
+          </span>
+        </div>
+        {player.listed_price && (
+          <div className="flex justify-between items-center">
+            <span className="text-gray-500 text-xs">En venta</span>
+            <span className="text-blue-400 text-xs font-semibold">{formatMoney(player.listed_price)}</span>
+          </div>
+        )}
+      </div>
+
+      {clauseSuccess && (
+        <div className="text-green-400 text-xs bg-green-500/10 border border-green-500/20 rounded-lg px-2 py-1.5 mb-2">
+          {clauseSuccess}
         </div>
       )}
 
+      {/* Action buttons */}
       <div className="flex flex-wrap gap-1.5">
         {!player.listed_price ? (
           <button
@@ -152,20 +135,21 @@ function PlayerCard({ player, onRefresh, config, rosterCount, minRoster }) {
           </button>
         )}
 
-        {!player.release_clause ? (
+        <button
+          onClick={() => { setShowClauseModal(true); setNewClause(''); setError('') }}
+          className="text-xs bg-orange-600 hover:bg-orange-500 text-white px-2 py-1 rounded-md transition-colors"
+        >
+          Subir cláusula
+        </button>
+
+        {clauseRaised && (
           <button
-            onClick={() => { setShowClauseModal(true); setError('') }}
-            className="text-xs bg-orange-600 hover:bg-orange-500 text-white px-2 py-1 rounded-md transition-colors"
-          >
-            Agregar cláusula
-          </button>
-        ) : (
-          <button
-            onClick={handleRemoveClause}
+            onClick={handleResetClause}
             disabled={loading}
-            className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded-md transition-colors"
+            title="Resetea la cláusula al valor base (sin reembolso)"
+            className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white px-2 py-1 rounded-md transition-colors"
           >
-            Quitar cláusula
+            Resetear
           </button>
         )}
 
@@ -179,32 +163,28 @@ function PlayerCard({ player, onRefresh, config, rosterCount, minRoster }) {
         </button>
       </div>
 
-      {/* List modal */}
+      {/* List for sale modal */}
       {showListModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 rounded-xl p-5 w-full max-w-sm border border-gray-700">
             <h3 className="text-white font-semibold mb-3">Poner en venta a {player.name}</h3>
+            <p className="text-gray-500 text-xs mb-3">Valor base: <span className="text-white">{basePrice ? formatMoney(basePrice) : '—'}</span></p>
             <input
               type="number"
               placeholder="Precio de venta"
-              value={price}
-              onChange={e => setPrice(e.target.value)}
+              value={listPrice}
+              onChange={e => setListPrice(e.target.value)}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 mb-2"
               autoFocus
             />
             {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
             <div className="flex gap-2">
-              <button
-                onClick={handleList}
-                disabled={loading}
-                className="flex-1 bg-green-500 hover:bg-green-400 text-white text-sm font-medium py-2 rounded-lg transition-colors"
-              >
+              <button onClick={handleList} disabled={loading}
+                className="flex-1 bg-green-500 hover:bg-green-400 text-white text-sm font-medium py-2 rounded-lg transition-colors">
                 Confirmar
               </button>
-              <button
-                onClick={() => { setShowListModal(false); setError('') }}
-                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium py-2 rounded-lg transition-colors"
-              >
+              <button onClick={() => { setShowListModal(false); setError('') }}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors">
                 Cancelar
               </button>
             </div>
@@ -212,32 +192,50 @@ function PlayerCard({ player, onRefresh, config, rosterCount, minRoster }) {
         </div>
       )}
 
-      {/* Clause modal */}
+      {/* Raise clause modal */}
       {showClauseModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 rounded-xl p-5 w-full max-w-sm border border-gray-700">
-            <h3 className="text-white font-semibold mb-3">Cláusula de {player.name}</h3>
+            <h3 className="text-white font-semibold mb-1">Subir cláusula — {player.name}</h3>
+            <p className="text-gray-500 text-xs mb-4">
+              Pagás la diferencia entre la nueva cláusula y la actual. El dinero no se devuelve si la bajás después.
+            </p>
+
+            <div className="bg-gray-800 rounded-lg p-3 mb-4 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Cláusula actual</span>
+                <span className="text-white font-medium">{effectiveClause ? formatMoney(effectiveClause) : '—'}</span>
+              </div>
+              {parsedNew > effectiveClause && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Nueva cláusula</span>
+                    <span className="text-orange-400 font-bold">{formatMoney(parsedNew)}</span>
+                  </div>
+                  <div className="border-t border-gray-700 pt-1.5 flex justify-between">
+                    <span className="text-gray-400">Costo para vos</span>
+                    <span className="text-red-400 font-bold">− {formatMoney(clauseCost)}</span>
+                  </div>
+                </>
+              )}
+            </div>
+
             <input
               type="number"
-              placeholder="Monto de la cláusula"
-              value={clauseAmount}
-              onChange={e => setClauseAmount(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 mb-2"
+              placeholder={`Mayor a ${effectiveClause ? effectiveClause.toLocaleString() : 0}`}
+              value={newClause}
+              onChange={e => setNewClause(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500 mb-2"
               autoFocus
             />
             {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
             <div className="flex gap-2">
-              <button
-                onClick={handleSetClause}
-                disabled={loading}
-                className="flex-1 bg-orange-500 hover:bg-orange-400 text-white text-sm font-medium py-2 rounded-lg transition-colors"
-              >
-                Establecer
+              <button onClick={handleRaiseClause} disabled={loading || parsedNew <= (effectiveClause ?? 0)}
+                className="flex-1 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white text-sm font-medium py-2 rounded-lg transition-colors">
+                {loading ? 'Guardando...' : clauseCost > 0 ? `Confirmar (−${formatMoney(clauseCost)})` : 'Confirmar'}
               </button>
-              <button
-                onClick={() => { setShowClauseModal(false); setError('') }}
-                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium py-2 rounded-lg transition-colors"
-              >
+              <button onClick={() => { setShowClauseModal(false); setError('') }}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors">
                 Cancelar
               </button>
             </div>
@@ -254,27 +252,22 @@ function PlayerCard({ player, onRefresh, config, rosterCount, minRoster }) {
               El jugador quedará como agente libre. Recibirás el{' '}
               <span className="text-green-400 font-bold">{config?.releasePct ?? 60}% del valor base</span>:
             </p>
-            <div className="bg-gray-800 rounded-lg px-4 py-3 mb-4 flex justify-between items-center">
+            <div className="bg-gray-800 rounded-lg px-4 py-3 mb-2 flex justify-between items-center">
               <span className="text-gray-400 text-sm">Valor base</span>
-              <span className="text-white font-medium">{basePrice ? formatMoney(basePrice) : '...'}</span>
+              <span className="text-white font-medium">{basePrice ? formatMoney(basePrice) : '—'}</span>
             </div>
             <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 mb-4 flex justify-between items-center">
               <span className="text-green-400 text-sm font-medium">Recibís</span>
-              <span className="text-green-400 font-bold text-lg">{releasePayout ? formatMoney(releasePayout) : '...'}</span>
+              <span className="text-green-400 font-bold text-lg">{releasePayout ? formatMoney(releasePayout) : '—'}</span>
             </div>
             {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
             <div className="flex gap-2">
-              <button
-                onClick={handleRelease}
-                disabled={loading}
-                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg transition-colors"
-              >
+              <button onClick={handleRelease} disabled={loading}
+                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg transition-colors">
                 {loading ? 'Liberando...' : 'Confirmar liberación'}
               </button>
-              <button
-                onClick={() => { setShowReleaseModal(false); setError('') }}
-                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium py-2 rounded-lg transition-colors"
-              >
+              <button onClick={() => { setShowReleaseModal(false); setError('') }}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors">
                 Cancelar
               </button>
             </div>
@@ -298,11 +291,8 @@ function ReceivedOffers({ onRefresh }) {
 
   const handleAccept = async (id) => {
     setLoading(true)
-    try {
-      await acceptOffer(id)
-      flash('Transferencia aceptada')
-      fetch(); onRefresh()
-    } catch (err) { flash(err.response?.data?.error || 'Error') }
+    try { await acceptOffer(id); flash('Transferencia aceptada'); fetch(); onRefresh() }
+    catch (err) { flash(err.response?.data?.error || 'Error') }
     finally { setLoading(false) }
   }
 
@@ -321,11 +311,8 @@ function ReceivedOffers({ onRefresh }) {
 
   const handleReject = async (id) => {
     setLoading(true)
-    try {
-      await rejectOffer(id)
-      flash('Oferta rechazada')
-      fetch()
-    } catch (err) { flash(err.response?.data?.error || 'Error') }
+    try { await rejectOffer(id); flash('Oferta rechazada'); fetch() }
+    catch (err) { flash(err.response?.data?.error || 'Error') }
     finally { setLoading(false) }
   }
 
@@ -354,11 +341,10 @@ function ReceivedOffers({ onRefresh }) {
             <div className="text-orange-400 font-bold text-lg">{formatMoney(o.clause_amount)}</div>
           </div>
 
-          {/* Raise clause input */}
           <div className="flex gap-2">
             <input
               type="number"
-              placeholder={`Subir cláusula (actual: ${o.clause_amount.toLocaleString()})`}
+              placeholder={`Mínimo ${(o.clause_amount + 1000000).toLocaleString()}`}
               value={raiseInputs[o.id] || ''}
               onChange={e => setRaiseInputs(prev => ({ ...prev, [o.id]: e.target.value }))}
               className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-orange-500 min-w-0"
@@ -372,22 +358,10 @@ function ReceivedOffers({ onRefresh }) {
             </button>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleAccept(o.id)}
-              disabled={loading}
-              className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
-            >
-              Aceptar transferencia
-            </button>
-            <button
-              onClick={() => handleReject(o.id)}
-              disabled={loading}
-              className="flex-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-sm py-2 rounded-lg transition-colors"
-            >
-              Rechazar
-            </button>
-          </div>
+          <button onClick={() => handleAccept(o.id)} disabled={loading}
+            className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
+            Aceptar transferencia
+          </button>
         </div>
       ))}
     </div>
@@ -408,7 +382,8 @@ export default function Team() {
 
   useEffect(() => {
     fetchPlayers()
-    getConfig().then(r => setConfig(r.data)).catch(console.error)
+    // getPublicConfig works for all users (not admin-only)
+    getPublicConfig().then(r => setConfig(r.data)).catch(console.error)
   }, [])
 
   const minRoster = config?.minRoster ?? 18
@@ -419,7 +394,6 @@ export default function Team() {
     return acc
   }, {})
 
-  // Add any positions not in the order
   players.forEach(p => {
     if (!positionOrder.includes(p.position)) {
       if (!grouped[p.position]) grouped[p.position] = []

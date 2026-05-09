@@ -4,6 +4,29 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
+// GET /api/config/public — non-sensitive values available to all logged-in users
+router.get('/public', authenticate, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT key, value FROM config WHERE key IN ('release_pct','max_roster','min_roster','price_multiplier','pos_mult_gk','pos_mult_def','pos_mult_mid','pos_mult_fwd')"
+    );
+    const cfg = Object.fromEntries(rows.map(r => [r.key, r.value]));
+    res.json({
+      releasePct:      parseInt(cfg.release_pct      || '60',   10),
+      maxRoster:       parseInt(cfg.max_roster        || '22',   10),
+      minRoster:       parseInt(cfg.min_roster        || '18',   10),
+      priceMultiplier: parseInt(cfg.price_multiplier  || '1000', 10),
+      posMultGk:       parseFloat(cfg.pos_mult_gk  || '0.8'),
+      posMultDef:      parseFloat(cfg.pos_mult_def || '0.9'),
+      posMultMid:      parseFloat(cfg.pos_mult_mid || '1.0'),
+      posMultFwd:      parseFloat(cfg.pos_mult_fwd || '1.2'),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
 // GET /api/config
 router.get('/', authenticate, async (req, res) => {
   if (!req.user.is_admin) return res.status(403).json({ error: 'Solo administradores' });

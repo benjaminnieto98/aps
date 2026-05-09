@@ -57,18 +57,39 @@ router.get('/market', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/players/clauses
+// GET /api/players/clauses — ALL owned players (except mine), effective clause = stored ?? base price
 router.get('/clauses', authenticate, async (req, res) => {
   try {
+    const { rows: cfgRows } = await pool.query(
+      "SELECT key, value FROM config WHERE key IN ('price_multiplier','pos_mult_gk','pos_mult_def','pos_mult_mid','pos_mult_fwd')"
+    );
+    const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]));
+    const base = parseInt(cfg.price_multiplier || '1000', 10);
+
     const { rows } = await pool.query(`
       SELECT p.*, u.username as owner_username
       FROM players p
       LEFT JOIN users u ON p.owner_id = u.id
-      WHERE p.release_clause IS NOT NULL
-      AND (p.owner_id != $1 OR p.owner_id IS NULL)
-      ORDER BY p.release_clause ASC
+      WHERE p.owner_id IS NOT NULL
+        AND p.owner_id != $1
+        AND p.listed_price IS NULL
+      ORDER BY p.rating DESC
     `, [req.user.id]);
-    res.json(rows);
+
+    const result = rows.map(p => {
+      const group = POSITION_GROUP[p.position] || 'mid';
+      const posMult = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
+      const basePrice = Math.round(p.rating * p.rating * base * posMult);
+      return {
+        ...p,
+        base_price: basePrice,
+        release_clause: p.release_clause ?? basePrice,   // effective clause for the buyer
+      };
+    });
+
+    // Sort by effective clause ascending
+    result.sort((a, b) => a.release_clause - b.release_clause);
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });
@@ -109,9 +130,15 @@ router.get('/free', async (req, res) => {
   }
 });
 
-// GET /api/players/my
+// GET /api/players/my — includes base_price so clients don't need config to show prices
 router.get('/my', authenticate, async (req, res) => {
   try {
+    const { rows: cfgRows } = await pool.query(
+      "SELECT key, value FROM config WHERE key IN ('price_multiplier','pos_mult_gk','pos_mult_def','pos_mult_mid','pos_mult_fwd')"
+    );
+    const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]));
+    const base = parseInt(cfg.price_multiplier || '1000', 10);
+
     const { rows } = await pool.query(`
       SELECT p.*, u.username as owner_username
       FROM players p
@@ -119,7 +146,15 @@ router.get('/my', authenticate, async (req, res) => {
       WHERE p.owner_id = $1
       ORDER BY p.rating DESC
     `, [req.user.id]);
-    res.json(rows);
+
+    const result = rows.map(p => {
+      const group = POSITION_GROUP[p.position] || 'mid';
+      const posMult = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
+      const basePrice = Math.round(p.rating * p.rating * base * posMult);
+      return { ...p, base_price: basePrice };
+    });
+
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });
@@ -178,7 +213,7 @@ router.post('/:id/unlist', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/players/:id/clause
+// POST /api/players/:id/clause — raise clause above base price; owner pays the difference
 router.post('/:id/clause', authenticate, async (req, res) => {
   const { amount } = req.body;
   const playerId = req.params.id;
@@ -190,10 +225,36 @@ router.post('/:id/clause', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM players WHERE id = $1', [playerId]);
     if (!rows[0]) return res.status(404).json({ error: 'Jugador no encontrado' });
-    if (rows[0].owner_id !== req.user.id) return res.status(403).json({ error: 'No es tu jugador' });
+    const player = rows[0];
+    if (player.owner_id !== req.user.id) return res.status(403).json({ error: 'No es tu jugador' });
 
-    await pool.query('UPDATE players SET release_clause = $1 WHERE id = $2', [parseInt(amount, 10), playerId]);
-    res.json({ success: true });
+    const basePrice = await getPlayerPrice(player);
+    const currentClause = player.release_clause ?? basePrice;
+    const newAmount = parseInt(amount, 10);
+
+    if (newAmount <= currentClause) {
+      return res.status(400).json({
+        error: `La nueva cláusula debe ser mayor a la actual (${currentClause.toLocaleString()})`
+      });
+    }
+
+    const cost = newAmount - currentClause;
+
+    const { rows: ownerRows } = await pool.query(
+      'SELECT budget FROM users WHERE id = $1', [req.user.id]
+    );
+    if (ownerRows[0].budget < cost) {
+      return res.status(400).json({
+        error: `Presupuesto insuficiente (necesitás ${cost.toLocaleString()} para subir la cláusula)`
+      });
+    }
+
+    await withTransaction(async (client) => {
+      await client.query('UPDATE users SET budget = budget - $1 WHERE id = $2', [cost, req.user.id]);
+      await client.query('UPDATE players SET release_clause = $1 WHERE id = $2', [newAmount, playerId]);
+    });
+
+    res.json({ success: true, newClause: newAmount, paid: cost });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });
@@ -280,16 +341,16 @@ router.post('/:id/buy', authenticate, async (req, res) => {
     let isClausePurchase = false;
 
     if (player.listed_price !== null) {
+      // Direct purchase at listed price (instant)
       price = player.listed_price;
-    } else if (player.release_clause !== null && player.owner_id !== null) {
-      price = player.release_clause;
-      isClausePurchase = true;
-    } else if (player.release_clause !== null && player.owner_id === null) {
-      price = player.release_clause;
     } else if (player.owner_id === null) {
-      price = await getPlayerPrice(player);
+      // Free agent — buy at base price instantly
+      price = player.release_clause ?? await getPlayerPrice(player);
     } else {
-      return res.status(400).json({ error: 'El jugador no está en venta' });
+      // Owned player — always a clause purchase (pending offer)
+      // Effective clause = explicitly raised clause OR base price
+      price = player.release_clause ?? await getPlayerPrice(player);
+      isClausePurchase = true;
     }
 
     const { rows: buyerRows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);

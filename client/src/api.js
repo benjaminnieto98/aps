@@ -47,6 +47,7 @@ export const saveResult = (id, data) => api.post(`/matches/${id}/result`, data)
 
 // Config
 export const getConfig = () => api.get('/config')
+export const getPublicConfig = () => api.get('/config/public')
 export const updateConfig = (data) => api.put('/config', data)
 
 // Stats

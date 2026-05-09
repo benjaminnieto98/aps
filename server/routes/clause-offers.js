@@ -125,10 +125,11 @@ router.post('/:id/raise', authenticate, async (req, res) => {
     if (offer.owner_id !== req.user.id) return res.status(403).json({ error: 'No sos el dueño del jugador' });
     if (offer.status !== 'pending') return res.status(400).json({ error: 'La oferta ya fue resuelta' });
 
+    const MIN_RAISE = 1_000_000;
     const newAmt = parseInt(newAmount, 10);
-    if (newAmt <= offer.clause_amount) {
+    if (newAmt < offer.clause_amount + MIN_RAISE) {
       return res.status(400).json({
-        error: `La nueva cláusula debe ser mayor a la actual (${offer.clause_amount})`
+        error: `La nueva cláusula debe ser al menos ${(offer.clause_amount + MIN_RAISE).toLocaleString()} (mínimo +1.000.000)`
       });
     }
 
