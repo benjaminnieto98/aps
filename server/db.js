@@ -10,6 +10,11 @@ const pool = new Pool({
     : false
 });
 
+// Force UTF-8 on every connection so accented characters (é, ñ, ü…) are stored/returned correctly
+pool.on('connect', client => {
+  client.query("SET client_encoding TO 'UTF8'").catch(console.error);
+});
+
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS config (
