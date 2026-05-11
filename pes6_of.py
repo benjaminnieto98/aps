@@ -175,8 +175,10 @@ def decrypt_blocks(data):
         end   = start + OF_BLOCK_SIZE[b]
         for a in range(start, end - 3, 4):
             c = read_uint32(data, a)
-            p = ((c - OF_KEY[k]) + 0x7AB3684C) ^ 0x7AB3684C
-            data[a:a+4] = (p % 0x100000000).to_bytes(4, 'little')
+            # Mask intermediate result to 32 bits BEFORE XOR to match Java int32 overflow
+            temp = ((c - OF_KEY[k]) + 0x7AB3684C) & 0xFFFFFFFF
+            p    = temp ^ 0x7AB3684C
+            data[a:a+4] = p.to_bytes(4, 'little')
             k = (k + 1) % 446
 
 
@@ -188,7 +190,9 @@ def encrypt_blocks(data):
         end   = start + OF_BLOCK_SIZE[b]
         for a in range(start, end - 3, 4):
             p = read_uint32(data, a)
-            c = (OF_KEY[k] + ((p ^ 0x7AB3684C) - 0x7AB3684C)) & 0xFFFFFFFF
+            # Mask to 32 bits to match Java int32 overflow
+            temp = ((p ^ 0x7AB3684C) - 0x7AB3684C) & 0xFFFFFFFF
+            c    = (OF_KEY[k] + temp) & 0xFFFFFFFF
             data[a:a+4] = c.to_bytes(4, 'little')
             k = (k + 1) % 446
 
@@ -218,9 +222,9 @@ def load_option_file(path):
 
 def save_option_file(data, path):
     out = bytearray(data)
-    update_checksums(out)
-    encrypt_blocks(out)
-    convert_data(out)
+    encrypt_blocks(out)    # 1. encriptar bloques 1-9
+    update_checksums(out)  # 2. checksum sobre datos ya encriptados (igual que el original)
+    convert_data(out)      # 3. XOR todo
     with open(path, 'wb') as f:
         f.write(out)
     print(f'  Guardado: {path}')
@@ -335,12 +339,12 @@ def cmd_apply(of_path, json_path, out_path):
         manager  = team.get('username', '?')
         of_name  = clubs.get(idx, f'Team {idx}')
 
-        print(f'  [{idx:3d}] {of_name:<28} ← {manager} ({len(pids)} jugadores)')
+        print(f'  [{idx:3d}] {of_name:<28} <- {manager} ({len(pids)} jugadores)')
         write_squad(data, idx, pids, nums)
 
     print(f'\nGuardando resultado...')
     save_option_file(data, out_path)
-    print('Listo. Copiá el archivo al directorio de saves de PES6.')
+    print('Listo. Copia el archivo al directorio de saves de PES6.')
 
 
 def cmd_read_squad(of_path, team_idx):
@@ -352,6 +356,42 @@ def cmd_read_squad(of_path, team_idx):
     print(f'Jugadores ({len(squad)}):')
     for pid, num in squad:
         print(f'  #{num:2d}  ID {pid}')
+
+
+def cmd_verify(of_path):
+    """
+    Round-trip test: decrypt then immediately re-encrypt without changes.
+    If the output is byte-identical to the original, the crypto is correct.
+    """
+    print(f'Leyendo original: {of_path}')
+    with open(of_path, 'rb') as f:
+        original = f.read()
+
+    print('Desencriptando...')
+    data = bytearray(original)
+    convert_data(data)
+    decrypt_blocks(data)
+
+    print('Re-encriptando...')
+    out = bytearray(data)
+    encrypt_blocks(out)      # 1. re-block-cipher (igual que estado A: XOR-decoded)
+    update_checksums(out)    # 2. checksum sobre datos ya encriptados
+    convert_data(out)        # 3. XOR todo
+
+    if bytes(out) == original:
+        print('\n[OK] CRYPTO CORRECTO - el round-trip es identico al original.')
+        print('   El problema no es el crypto, revisa la ubicacion/nombre del archivo.')
+    else:
+        # Find first difference
+        diffs = [(i, original[i], out[i]) for i in range(len(original)) if original[i] != out[i]]
+        print(f'\n[ERROR] CRYPTO INCORRECTO - {len(diffs)} bytes diferentes.')
+        print('   Primeras diferencias:')
+        for offset, orig_b, new_b in diffs[:10]:
+            print(f'   offset {offset:8d} (0x{offset:07X}): original=0x{orig_b:02X}  nuevo=0x{new_b:02X}')
+        out_path = of_path + '_verify_test'
+        with open(out_path, 'wb') as f:
+            f.write(out)
+        print(f'\n   Archivo de prueba guardado en: {out_path}')
 
 # ─── Entry point ─────────────────────────────────────────────────────────────
 
@@ -368,10 +408,14 @@ def main():
                         help='Archivo de salida (default: KONAMI-WIN32PES6OPT_APS)')
     parser.add_argument('--read-squad',  metavar='TEAM_IDX', type=int,
                         help='Mostrar plantel actual de un equipo (debug)')
+    parser.add_argument('--verify',      action='store_true',
+                        help='Test round-trip: decrypt+re-encrypt sin cambios, compara con original')
     args = parser.parse_args()
 
     if args.list_clubs:
         cmd_list_clubs(args.option_file)
+    elif args.verify:
+        cmd_verify(args.option_file)
     elif args.apply:
         cmd_apply(args.option_file, args.apply, args.output)
     elif args.read_squad is not None:

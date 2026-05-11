@@ -33,7 +33,15 @@
       "Bash(where gh *)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:www.scribd.com)"
+      "WebFetch(domain:www.scribd.com)",
+      "Bash(python pes6_of.py KONAMI-WIN32PES6OPT --verify)",
+      "Bash(python3 -)",
+      "Bash(python -)",
+      "Bash(python pes6_of.py \"KONAMI-WIN32PES6OPT_APS\" --verify)",
+      "Bash(python pes6_of.py KONAMI-WIN32PES6OPT --apply aps_export.json --output KONAMI-WIN32PES6OPT_APS)",
+      "Bash(python pes6_of.py KONAMI-WIN32PES6OPT_APS --verify)",
+      "Bash(python pes6_of.py KONAMI-WIN32PES6OPT_APS --read-squad 110)",
+      "Bash(python pes6_of.py KONAMI-WIN32PES6OPT_APS --read-squad 6)"
     ]
   }
 }
