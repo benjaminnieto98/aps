@@ -265,7 +265,7 @@ def read_squad(data, team_idx):
     for i in range(size):
         pid  = int.from_bytes(data[slot_off + i*2 : slot_off + i*2 + 2], 'little')
         num  = data[num_off + i]
-        if pid != 0:
+        if pid != 0 and num != 0xFF:   # 0xFF en num = slot vacio en PES6
             result.append((pid, num))
     return result
 
@@ -294,7 +294,7 @@ def write_squad(data, team_idx, player_ids, shirt_numbers=None):
             pid = int(player_ids[i])
             num = int(nums[i]) if i < len(nums) else i + 1
         else:
-            pid, num = 0, 0
+            pid, num = 0, 0xFF   # PES6 usa num=0xFF para marcar slots vacios
         data[slot_off + i*2]     = pid & 0xFF
         data[slot_off + i*2 + 1] = (pid >> 8) & 0xFF
         data[num_off + i]         = num & 0xFF
