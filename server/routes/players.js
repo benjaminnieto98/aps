@@ -12,15 +12,28 @@ const POSITION_GROUP = {
   LW:  'fwd', ST: 'fwd'
 };
 
+// All config keys needed for price calculation
+const PRICE_CONFIG_KEYS =
+  "'price_multiplier','pos_mult_gk','pos_mult_def','pos_mult_mid','pos_mult_fwd','rating_threshold','low_rating_mult'";
+
+// Pure price calculation — pass a cfg object already fetched from DB
+function calcPrice(player, cfg) {
+  const base      = parseInt(cfg.price_multiplier  || '1000', 10);
+  const group     = POSITION_GROUP[player.position] || 'mid';
+  const posMult   = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
+  const threshold = parseInt(cfg.rating_threshold   || '80',  10);
+  const lowMult   = parseFloat(cfg.low_rating_mult  || '0.5');
+  const ratingMult = player.rating < threshold ? lowMult : 1.0;
+  return Math.round(player.rating * player.rating * base * posMult * ratingMult);
+}
+
+// Fetches config once then calls calcPrice
 async function getPlayerPrice(player) {
   const { rows } = await pool.query(
-    "SELECT key, value FROM config WHERE key IN ('price_multiplier','pos_mult_gk','pos_mult_def','pos_mult_mid','pos_mult_fwd')"
+    `SELECT key, value FROM config WHERE key IN (${PRICE_CONFIG_KEYS})`
   );
   const cfg = Object.fromEntries(rows.map(r => [r.key, r.value]));
-  const base = parseInt(cfg.price_multiplier || '1000', 10);
-  const group = POSITION_GROUP[player.position] || 'mid';
-  const posMult = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
-  return Math.round(player.rating * player.rating * base * posMult);
+  return calcPrice(player, cfg);
 }
 
 // GET /api/players
@@ -61,10 +74,9 @@ router.get('/market', authenticate, async (req, res) => {
 router.get('/clauses', authenticate, async (req, res) => {
   try {
     const { rows: cfgRows } = await pool.query(
-      "SELECT key, value FROM config WHERE key IN ('price_multiplier','pos_mult_gk','pos_mult_def','pos_mult_mid','pos_mult_fwd')"
+      `SELECT key, value FROM config WHERE key IN (${PRICE_CONFIG_KEYS})`
     );
     const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]));
-    const base = parseInt(cfg.price_multiplier || '1000', 10);
 
     const { rows } = await pool.query(`
       SELECT p.*, u.username as owner_username
@@ -77,17 +89,14 @@ router.get('/clauses', authenticate, async (req, res) => {
     `, [req.user.id]);
 
     const result = rows.map(p => {
-      const group = POSITION_GROUP[p.position] || 'mid';
-      const posMult = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
-      const basePrice = Math.round(p.rating * p.rating * base * posMult);
+      const basePrice = calcPrice(p, cfg);
       return {
         ...p,
         base_price: basePrice,
-        release_clause: p.release_clause ?? basePrice,   // effective clause for the buyer
+        release_clause: p.release_clause ?? basePrice,
       };
     });
 
-    // Sort by effective clause ascending
     result.sort((a, b) => a.release_clause - b.release_clause);
     res.json(result);
   } catch (err) {
@@ -100,10 +109,9 @@ router.get('/clauses', authenticate, async (req, res) => {
 router.get('/free', async (req, res) => {
   try {
     const { rows: cfgRows } = await pool.query(
-      "SELECT key, value FROM config WHERE key IN ('price_multiplier','pos_mult_gk','pos_mult_def','pos_mult_mid','pos_mult_fwd','hide_without_team')"
+      `SELECT key, value FROM config WHERE key IN (${PRICE_CONFIG_KEYS},'hide_without_team')`
     );
     const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]));
-    const base = parseInt(cfg.price_multiplier || '1000', 10);
     const hideWithout = cfg.hide_without_team === '1';
 
     const whereExtra = hideWithout
@@ -117,13 +125,7 @@ router.get('/free', async (req, res) => {
       ORDER BY p.rating DESC
     `);
 
-    const playersWithPrice = rows.map(p => {
-      const group = POSITION_GROUP[p.position] || 'mid';
-      const posMult = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
-      return { ...p, price: Math.round(p.rating * p.rating * base * posMult) };
-    });
-
-    res.json(playersWithPrice);
+    res.json(rows.map(p => ({ ...p, price: calcPrice(p, cfg) })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });
@@ -134,10 +136,9 @@ router.get('/free', async (req, res) => {
 router.get('/my', authenticate, async (req, res) => {
   try {
     const { rows: cfgRows } = await pool.query(
-      "SELECT key, value FROM config WHERE key IN ('price_multiplier','pos_mult_gk','pos_mult_def','pos_mult_mid','pos_mult_fwd')"
+      `SELECT key, value FROM config WHERE key IN (${PRICE_CONFIG_KEYS})`
     );
     const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]));
-    const base = parseInt(cfg.price_multiplier || '1000', 10);
 
     const { rows } = await pool.query(`
       SELECT p.*, u.username as owner_username
@@ -148,9 +149,7 @@ router.get('/my', authenticate, async (req, res) => {
     `, [req.user.id]);
 
     const result = rows.map(p => {
-      const group = POSITION_GROUP[p.position] || 'mid';
-      const posMult = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
-      const basePrice = Math.round(p.rating * p.rating * base * posMult);
+      const basePrice = calcPrice(p, cfg);
       return { ...p, base_price: basePrice };
     });
 

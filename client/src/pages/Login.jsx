@@ -1,15 +1,27 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { login, register } from '../api'
+import { login, register, getRegistrationStatus } from '../api'
 
 export default function Login() {
   const [tab, setTab] = useState('login')
   const [form, setForm] = useState({ username: '', password: '', adminCode: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [registrationOpen, setRegistrationOpen] = useState(true)
   const { login: authLogin } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    getRegistrationStatus()
+      .then(r => setRegistrationOpen(r.data.open))
+      .catch(() => setRegistrationOpen(true)) // fail open if endpoint unreachable
+  }, [])
+
+  // If registration is closed and user is on register tab, switch to login
+  useEffect(() => {
+    if (!registrationOpen && tab === 'register') setTab('login')
+  }, [registrationOpen, tab])
 
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value })
 
@@ -56,14 +68,16 @@ export default function Login() {
             >
               Iniciar Sesión
             </button>
-            <button
-              onClick={() => { setTab('register'); setError('') }}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
-                tab === 'register' ? 'bg-green-500 text-white' : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Registrarse
-            </button>
+            {registrationOpen && (
+              <button
+                onClick={() => { setTab('register'); setError('') }}
+                className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
+                  tab === 'register' ? 'bg-green-500 text-white' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Registrarse
+              </button>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

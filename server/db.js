@@ -113,8 +113,11 @@ async function initDb() {
     ['pos_mult_gk',     '0.8'],
     ['pos_mult_def',    '0.9'],
     ['pos_mult_mid',    '1.0'],
-    ['pos_mult_fwd',       '1.2'],
-    ['hide_without_team', '0'],
+    ['pos_mult_fwd',         '1.2'],
+    ['hide_without_team',    '0'],
+    ['rating_threshold',     '80'],
+    ['low_rating_mult',      '0.5'],
+    ['disable_registration', '0'],
   ];
   for (const [key, value] of defaults) {
     await pool.query(

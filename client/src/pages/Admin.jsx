@@ -563,7 +563,10 @@ function calcPriceAdmin(rating, position, cfg) {
   const group = POSITION_GROUP_ADMIN[position] || 'mid'
   const multKey = { gk: 'posMultGk', def: 'posMultDef', mid: 'posMultMid', fwd: 'posMultFwd' }[group]
   const posMult = parseFloat(cfg[multKey] ?? 1)
-  return Math.round(rating * rating * (parseInt(cfg.priceMultiplier) || 1000) * posMult)
+  const threshold = parseInt(cfg.ratingThreshold) || 80
+  const lowMult = parseFloat(cfg.lowRatingMult) || 0.5
+  const ratingMult = rating < threshold ? lowMult : 1.0
+  return Math.round(rating * rating * (parseInt(cfg.priceMultiplier) || 1000) * posMult * ratingMult)
 }
 
 function ConfigTab() {
@@ -571,7 +574,8 @@ function ConfigTab() {
     initialBudget: 50000000, priceMultiplier: 1000,
     maxRoster: 22, minRoster: 18, releasePct: 60, adminCode: 'aps2006',
     posMultGk: 0.8, posMultDef: 0.9, posMultMid: 1.0, posMultFwd: 1.2,
-    hideWithoutTeam: false
+    hideWithoutTeam: false, ratingThreshold: 80, lowRatingMult: 0.5,
+    disableRegistration: false
   })
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
@@ -591,13 +595,13 @@ function ConfigTab() {
 
   const priceExamples = [
     { ovr: 95, pos: 'ST',  label: 'ST 95' },
-    { ovr: 95, pos: 'LW',  label: 'LW 95' },
     { ovr: 90, pos: 'ST',  label: 'ST 90' },
-    { ovr: 90, pos: 'CM',  label: 'CM 90' },
     { ovr: 85, pos: 'CAM', label: 'CAM 85' },
     { ovr: 85, pos: 'CB',  label: 'CB 85' },
     { ovr: 80, pos: 'GK',  label: 'GK 80' },
-    { ovr: 75, pos: 'LB',  label: 'LB 75' },
+    { ovr: 78, pos: 'ST',  label: 'ST 78 ↓' },
+    { ovr: 75, pos: 'CM',  label: 'CM 75 ↓' },
+    { ovr: 70, pos: 'LB',  label: 'LB 70 ↓' },
   ]
 
   if (loading) return <div className="text-gray-400 text-center py-12">Cargando...</div>
@@ -657,25 +661,75 @@ function ConfigTab() {
           </div>
         </div>
 
+        {/* Rating threshold */}
+        <div>
+          <h4 className="text-gray-400 text-sm font-medium mb-3">Descuento por OVR bajo</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-gray-700/50 rounded-lg p-3">
+              <label className="text-gray-400 text-xs block mb-0.5">Umbral OVR</label>
+              <p className="text-gray-600 text-xs mb-2">Jugadores con OVR menor a este valor reciben descuento</p>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                value={config.ratingThreshold ?? ''}
+                onChange={e => setConfig(prev => ({ ...prev, ratingThreshold: e.target.value }))}
+                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-green-500"
+              />
+            </div>
+            <div className="bg-gray-700/50 rounded-lg p-3">
+              <label className="text-gray-400 text-xs block mb-0.5">Multiplicador bajo umbral</label>
+              <p className="text-gray-600 text-xs mb-2">0.5 = mitad de precio para OVR bajo</p>
+              <input
+                type="number"
+                step="0.05"
+                min="0.05"
+                max="1"
+                value={config.lowRatingMult ?? ''}
+                onChange={e => setConfig(prev => ({ ...prev, lowRatingMult: e.target.value }))}
+                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-green-500"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Visibility options */}
         <div>
-          <h4 className="text-gray-400 text-sm font-medium mb-3">Visibilidad</h4>
-          <label className="flex items-center gap-3 cursor-pointer select-none w-fit">
-            <div
-              onClick={() => setConfig(prev => ({ ...prev, hideWithoutTeam: !prev.hideWithoutTeam }))}
-              className={`relative w-10 h-5 rounded-full transition-colors ${
-                config.hideWithoutTeam ? 'bg-green-500' : 'bg-gray-600'
-              }`}
-            >
-              <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                config.hideWithoutTeam ? 'translate-x-5' : 'translate-x-0'
-              }`} />
-            </div>
-            <div>
-              <div className="text-white text-sm">Ocultar jugadores sin equipo</div>
-              <div className="text-gray-500 text-xs">Filtra los jugadores con equipo "without team" del mercado de agentes libres</div>
-            </div>
-          </label>
+          <h4 className="text-gray-400 text-sm font-medium mb-3">Visibilidad y acceso</h4>
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer select-none w-fit">
+              <div
+                onClick={() => setConfig(prev => ({ ...prev, hideWithoutTeam: !prev.hideWithoutTeam }))}
+                className={`relative w-10 h-5 rounded-full transition-colors ${
+                  config.hideWithoutTeam ? 'bg-green-500' : 'bg-gray-600'
+                }`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                  config.hideWithoutTeam ? 'translate-x-5' : 'translate-x-0'
+                }`} />
+              </div>
+              <div>
+                <div className="text-white text-sm">Ocultar jugadores sin equipo</div>
+                <div className="text-gray-500 text-xs">Filtra los jugadores con equipo "without team" del mercado de agentes libres</div>
+              </div>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer select-none w-fit">
+              <div
+                onClick={() => setConfig(prev => ({ ...prev, disableRegistration: !prev.disableRegistration }))}
+                className={`relative w-10 h-5 rounded-full transition-colors ${
+                  config.disableRegistration ? 'bg-red-500' : 'bg-gray-600'
+                }`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                  config.disableRegistration ? 'translate-x-5' : 'translate-x-0'
+                }`} />
+              </div>
+              <div>
+                <div className="text-white text-sm">Deshabilitar registro de usuarios</div>
+                <div className="text-gray-500 text-xs">Impide que nuevos usuarios se registren en la plataforma</div>
+              </div>
+            </label>
+          </div>
         </div>
 
         <button
@@ -688,15 +742,17 @@ function ConfigTab() {
 
       {/* Price examples with position multipliers */}
       <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-        <h3 className="text-white font-semibold text-sm mb-3">
+        <h3 className="text-white font-semibold text-sm mb-1">
           Precios de referencia (multiplicador base: {config.priceMultiplier})
         </h3>
+        <p className="text-gray-500 text-xs mb-3">↓ = bajo umbral OVR {config.ratingThreshold}, precio reducido ×{config.lowRatingMult}</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {priceExamples.map(({ ovr, pos, label }) => {
             const price = calcPriceAdmin(ovr, pos, config)
+            const belowThreshold = ovr < (parseInt(config.ratingThreshold) || 80)
             return (
-              <div key={label} className="flex justify-between text-sm bg-gray-700/50 rounded-lg px-3 py-2">
-                <span className="text-yellow-400 font-bold">{label}</span>
+              <div key={label} className={`flex justify-between text-sm rounded-lg px-3 py-2 ${belowThreshold ? 'bg-orange-900/30 border border-orange-700/30' : 'bg-gray-700/50'}`}>
+                <span className={`font-bold ${belowThreshold ? 'text-orange-400' : 'text-yellow-400'}`}>{label}</span>
                 <span className="text-green-400">{formatMoney(price)}</span>
               </div>
             )

@@ -11,6 +11,14 @@ router.post('/register', async (req, res) => {
   try {
     const { username, password, adminCode } = req.body;
 
+    // Check if registration is disabled
+    const { rows: cfgReg } = await pool.query(
+      "SELECT value FROM config WHERE key = 'disable_registration'"
+    );
+    if (cfgReg[0] && cfgReg[0].value === '1') {
+      return res.status(403).json({ error: 'El registro de nuevos usuarios está deshabilitado' });
+    }
+
     if (!username || !password) {
       return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
     }
