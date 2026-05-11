@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import {
   getUsers, assignTeam, resetTeam, deleteUser, setBudget, toggleAdmin,
+  setPes6Index, exportOptionFile,
   getAllPlayers, editPlayer, addPlayer,
   getTournaments, createTournament, finishTournament,
   getConfig, updateConfig
@@ -13,6 +14,7 @@ function UsersTab() {
   const [loading, setLoading] = useState(true)
   const [editBudget, setEditBudget] = useState({})
   const [editTeam, setEditTeam] = useState({})
+  const [editPes6, setEditPes6] = useState({})
   const [msg, setMsg] = useState('')
 
   const fetchUsers = () => {
@@ -69,11 +71,46 @@ function UsersTab() {
     } catch (err) { flash(err.response?.data?.error || 'Error') }
   }
 
+  const handleSetPes6Index = async (id) => {
+    const val = editPes6[id]
+    if (val === undefined || val === '') return
+    try {
+      await setPes6Index(id, val === '-' ? null : val)
+      flash('Índice PES6 guardado')
+      fetchUsers()
+      setEditPes6(prev => ({ ...prev, [id]: '' }))
+    } catch (err) { flash(err.response?.data?.error || 'Error') }
+  }
+
+  const handleExportOF = async () => {
+    try {
+      const res = await exportOptionFile()
+      const json = JSON.stringify(res.data, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href = url
+      a.download = 'aps_export.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) { flash(err.response?.data?.error || 'Error al exportar') }
+  }
+
   if (loading) return <div className="text-gray-400 text-center py-12">Cargando...</div>
 
   return (
     <div className="space-y-4">
       {msg && <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2 text-green-400 text-sm">{msg}</div>}
+
+      <div className="flex justify-end">
+        <button
+          onClick={handleExportOF}
+          className="bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors flex items-center gap-2"
+        >
+          ⬇ Exportar para PES6
+        </button>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -85,6 +122,7 @@ function UsersTab() {
               <th className="px-3 py-2 text-center">Admin</th>
               <th className="px-3 py-2 text-left">Asignar Equipo</th>
               <th className="px-3 py-2 text-left">Editar Presupuesto</th>
+              <th className="px-3 py-2 text-center">PES6 idx</th>
               <th className="px-3 py-2 text-center">Acciones</th>
             </tr>
           </thead>
@@ -138,6 +176,24 @@ function UsersTab() {
                     <button
                       onClick={() => handleSetBudget(u.id)}
                       className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-1 rounded transition-colors"
+                    >
+                      OK
+                    </button>
+                  </div>
+                </td>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      placeholder={u.pes6_team_index ?? '—'}
+                      value={editPes6[u.id] ?? ''}
+                      onChange={e => setEditPes6(prev => ({ ...prev, [u.id]: e.target.value }))}
+                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs w-16 text-center focus:outline-none focus:border-purple-500"
+                      onKeyDown={e => e.key === 'Enter' && handleSetPes6Index(u.id)}
+                    />
+                    <button
+                      onClick={() => handleSetPes6Index(u.id)}
+                      className="bg-purple-700 hover:bg-purple-600 text-white text-xs px-2 py-1 rounded transition-colors"
                     >
                       OK
                     </button>

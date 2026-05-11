@@ -10,6 +10,7 @@ router.get('/', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT u.id, u.username, u.is_admin, u.team_name, u.budget, u.created_at,
+             u.pes6_team_index,
              COUNT(p.id)::int as player_count
       FROM users u
       LEFT JOIN players p ON p.owner_id = u.id
@@ -17,6 +18,55 @@ router.get('/', authenticate, async (req, res) => {
       ORDER BY u.username
     `);
     res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// POST /api/users/:id/pes6-index  { teamIndex }
+router.post('/:id/pes6-index', authenticate, async (req, res) => {
+  if (!req.user.is_admin) return res.status(403).json({ error: 'Solo administradores' });
+
+  const userId = parseInt(req.params.id, 10);
+  const { teamIndex } = req.body;
+  const idx = teamIndex === null || teamIndex === '' ? null : parseInt(teamIndex, 10);
+
+  try {
+    await pool.query('UPDATE users SET pes6_team_index = $1 WHERE id = $2', [idx, userId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// GET /api/users/export-of  — genera el JSON listo para pes6_of.py
+router.get('/export-of', authenticate, async (req, res) => {
+  if (!req.user.is_admin) return res.status(403).json({ error: 'Solo administradores' });
+
+  try {
+    const { rows } = await pool.query(`
+      SELECT u.id, u.username, u.team_name, u.pes6_team_index,
+             COALESCE(
+               json_agg(p.id::int ORDER BY p.rating DESC) FILTER (WHERE p.id IS NOT NULL),
+               '[]'
+             ) AS players
+      FROM users u
+      LEFT JOIN players p ON p.owner_id = u.id
+      WHERE u.pes6_team_index IS NOT NULL
+      GROUP BY u.id
+      ORDER BY u.username
+    `);
+
+    const teams = rows.map(u => ({
+      username:   u.username,
+      team_name:  u.team_name || u.username,
+      team_index: u.pes6_team_index,
+      players:    u.players,
+    }));
+
+    res.json({ teams });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });

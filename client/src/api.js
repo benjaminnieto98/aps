@@ -35,6 +35,8 @@ export const resetTeam = (id) => api.post(`/users/${id}/reset-team`)
 export const deleteUser = (id) => api.delete(`/users/${id}`)
 export const setBudget = (id, amount) => api.post(`/users/${id}/budget`, { amount })
 export const toggleAdmin = (id) => api.post(`/users/${id}/toggle-admin`)
+export const setPes6Index = (id, teamIndex) => api.post(`/users/${id}/pes6-index`, { teamIndex })
+export const exportOptionFile = () => api.get('/users/export-of')
 
 // Tournaments
 export const getTournaments = () => api.get('/tournaments')

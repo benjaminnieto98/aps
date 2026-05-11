@@ -1,0 +1,22 @@
+{
+  "teams": [
+    {
+      "username": "Benjamin Nieto",
+      "team_name": "Celtic",
+      "team_index": 110,
+      "players": []
+    },
+    {
+      "username": "Nicolas Balsamo",
+      "team_name": "Everton",
+      "team_index": 6,
+      "players": []
+    },
+    {
+      "username": "Valentin FM",
+      "team_name": "Aston Villa",
+      "team_index": 1,
+      "players": []
+    }
+  ]
+}

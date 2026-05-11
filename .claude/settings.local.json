@@ -30,7 +30,10 @@
       "Bash(git push *)",
       "Bash(gh repo *)",
       "Bash(gh pr *)",
-      "Bash(where gh *)"
+      "Bash(where gh *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.scribd.com)"
     ]
   }
 }

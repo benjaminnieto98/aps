@@ -32,6 +32,8 @@ async function initDb() {
       created_at BIGINT
     );
 
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pes6_team_index INTEGER;
+
     CREATE TABLE IF NOT EXISTS players (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
