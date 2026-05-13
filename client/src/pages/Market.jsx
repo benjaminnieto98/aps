@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { getMarketPlayers, getClausePlayers, getFreePlayers, buyPlayer, getSentOffers } from '../api'
+import { getMarketPlayers, getClausePlayers, getFreePlayers, buyPlayer, makeDirectOffer, getSentOffers, acceptRaisedOffer, cancelOffer } from '../api'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, ratingColor } from '../utils/format'
 
 const STATUS_LABELS = {
-  pending:  { label: 'Pendiente',       color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
-  accepted: { label: 'Aceptada',        color: 'text-green-400 bg-green-400/10 border-green-400/30' },
-  raised:   { label: 'Cláusula subida', color: 'text-orange-400 bg-orange-400/10 border-orange-400/30' },
-  rejected: { label: 'Rechazada',       color: 'text-red-400 bg-red-400/10 border-red-400/30' },
+  pending:   { label: 'Pendiente',       color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
+  accepted:  { label: 'Aceptada',        color: 'text-green-400 bg-green-400/10 border-green-400/30' },
+  raised:    { label: 'Cláusula subida', color: 'text-orange-400 bg-orange-400/10 border-orange-400/30' },
+  rejected:  { label: 'Rechazada',       color: 'text-red-400 bg-red-400/10 border-red-400/30' },
+  cancelled: { label: 'Cancelada',       color: 'text-gray-400 bg-gray-400/10 border-gray-400/30' },
 }
 
 const ALL_POSITIONS = ['GK', 'CB', 'LB', 'CDM', 'CM', 'CAM', 'LW', 'ST']
 
-function PlayerRow({ player, priceField, onBuy, isClause }) {
+function PlayerRow({ player, priceField, onBuy, isClause, onDirectOffer }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors">
       <div className="flex-1 min-w-0">
@@ -22,12 +23,20 @@ function PlayerRow({ player, priceField, onBuy, isClause }) {
           <div className="text-gray-600 text-xs">Dueño: {player.owner_username}</div>
         )}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <span className={`text-sm font-bold ${ratingColor(player.rating)}`}>{player.rating}</span>
         <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{player.position}</span>
         <div className="text-right min-w-[90px]">
           <div className="text-green-400 font-bold text-sm">{formatMoney(player[priceField])}</div>
         </div>
+        {isClause && onDirectOffer && (
+          <button
+            onClick={() => onDirectOffer(player)}
+            className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-blue-700 hover:bg-blue-600"
+          >
+            Hacer oferta
+          </button>
+        )}
         <button
           onClick={() => onBuy(player)}
           className={`text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
@@ -59,6 +68,11 @@ export default function Market() {
   const [buying, setBuying] = useState(false)
   const [buyError, setBuyError] = useState('')
   const [buySuccess, setBuySuccess] = useState('')
+  // Direct offer modal (below-clause)
+  const [directOfferPlayer, setDirectOfferPlayer] = useState(null)
+  const [directOfferAmt, setDirectOfferAmt] = useState('')
+  const [directOfferErr, setDirectOfferErr] = useState('')
+  const [directOfferLoading, setDirectOfferLoading] = useState(false)
 
   const fetchAll = useCallback(() => {
     setLoading(true)
@@ -122,7 +136,40 @@ export default function Market() {
     }
   }
 
-  const pendingCount = sentOffers.filter(o => o.status === 'pending').length
+  const handleDirectOffer = async () => {
+    const amt = parseInt(directOfferAmt)
+    if (!amt || amt <= 0) return setDirectOfferErr('Monto inválido')
+    setDirectOfferLoading(true); setDirectOfferErr('')
+    try {
+      await makeDirectOffer(directOfferPlayer.id, amt)
+      setBuySuccess(`Oferta de ${formatMoney(amt)} enviada por ${directOfferPlayer.name}`)
+      setDirectOfferPlayer(null); setDirectOfferAmt('')
+      fetchAll()
+      setTimeout(() => setBuySuccess(''), 5000)
+    } catch (err) {
+      setDirectOfferErr(err.response?.data?.error || 'Error')
+    } finally { setDirectOfferLoading(false) }
+  }
+
+  const handleAcceptRaised = async (offerId) => {
+    try {
+      await acceptRaisedOffer(offerId)
+      setBuySuccess('¡Transferencia completada con la cláusula aumentada!')
+      fetchAll(); refreshUser()
+      setTimeout(() => setBuySuccess(''), 5000)
+    } catch (err) {
+      setBuyError(err.response?.data?.error || 'Error')
+    }
+  }
+
+  const handleCancelOffer = async (offerId) => {
+    try {
+      await cancelOffer(offerId)
+      fetchAll()
+    } catch (err) { console.error(err) }
+  }
+
+  const pendingCount = sentOffers.filter(o => ['pending', 'raised'].includes(o.status)).length
 
   const tabs = [
     { id: 'market',  label: 'En venta',      count: marketPlayers.length },
@@ -318,6 +365,7 @@ export default function Market() {
                     priceField={priceField}
                     onBuy={setConfirmPlayer}
                     isClause={isClauseTab}
+                    onDirectOffer={isClauseTab ? setDirectOfferPlayer : null}
                   />
                 ))}
               </div>
@@ -337,29 +385,64 @@ export default function Market() {
             <div className="divide-y divide-gray-800/50">
               {sentOffers.map(o => {
                 const statusInfo = STATUS_LABELS[o.status] || STATUS_LABELS.pending
+                const isRaised = o.status === 'raised'
+                const typeLabel = o.offer_type === 'offer' ? 'Oferta directa' : 'Cláusula'
                 return (
-                  <div key={o.id} className="px-4 py-3 flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-white font-medium text-sm">{o.player_name}</span>
-                        <span className="text-yellow-400 text-xs font-bold">{o.player_rating}</span>
-                        <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{o.player_position}</span>
-                      </div>
-                      <div className="text-gray-500 text-xs mt-0.5">
-                        Dueño: {o.owner_username} · {new Date(o.created_at).toLocaleDateString('es-AR')}
-                      </div>
-                      {o.status === 'raised' && o.new_clause_amount && (
-                        <div className="text-orange-400 text-xs mt-0.5">
-                          Nueva cláusula: {formatMoney(o.new_clause_amount)}
+                  <div key={o.id} className="px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-white font-medium text-sm">{o.player_name}</span>
+                          <span className="text-yellow-400 text-xs font-bold">{o.player_rating}</span>
+                          <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{o.player_position}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded border ${o.offer_type === 'offer' ? 'text-blue-400 border-blue-400/30 bg-blue-400/10' : 'text-orange-400 border-orange-400/30 bg-orange-400/10'}`}>
+                            {typeLabel}
+                          </span>
                         </div>
-                      )}
+                        <div className="text-gray-500 text-xs mt-0.5">
+                          Dueño: {o.owner_username} · {new Date(o.created_at).toLocaleDateString('es-AR')}
+                        </div>
+                        {isRaised && o.new_clause_amount && (
+                          <div className="text-orange-300 text-xs mt-1 bg-orange-500/10 border border-orange-500/20 rounded px-2 py-1">
+                            El dueño subió la cláusula a <strong>{formatMoney(o.new_clause_amount)}</strong>. ¿Aceptás?
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-green-400 font-bold text-sm">{formatMoney(o.clause_amount)}</div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full border mt-1 inline-block ${statusInfo.color}`}>
+                          {statusInfo.label}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-green-400 font-bold text-sm">{formatMoney(o.clause_amount)}</div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full border mt-1 inline-block ${statusInfo.color}`}>
-                        {statusInfo.label}
-                      </span>
-                    </div>
+                    {/* Action buttons for raised offers */}
+                    {isRaised && o.new_clause_amount && (
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => handleAcceptRaised(o.id)}
+                          className="bg-green-600 hover:bg-green-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          Aceptar y pagar {formatMoney(o.new_clause_amount)}
+                        </button>
+                        <button
+                          onClick={() => handleCancelOffer(o.id)}
+                          className="bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          Retirarme
+                        </button>
+                      </div>
+                    )}
+                    {/* Cancel pending offers */}
+                    {o.status === 'pending' && (
+                      <div className="mt-2">
+                        <button
+                          onClick={() => handleCancelOffer(o.id)}
+                          className="text-gray-500 hover:text-red-400 text-xs transition-colors"
+                        >
+                          Cancelar oferta
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -418,6 +501,55 @@ export default function Market() {
               </button>
               <button
                 onClick={() => { setConfirmPlayer(null); setBuyError('') }}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium py-2.5 rounded-xl transition-colors text-sm"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Direct offer modal */}
+      {directOfferPlayer && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-sm border border-gray-700 shadow-2xl">
+            <h3 className="text-white text-lg font-bold mb-1">Hacer oferta directa</h3>
+            <p className="text-blue-300 text-xs mb-3 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
+              El dueño puede aceptar o rechazar. Si rechaza, no perdés dinero.
+            </p>
+            <p className="text-gray-400 text-sm mb-1">
+              Oferta por <span className="text-white font-semibold">{directOfferPlayer.name}</span>
+            </p>
+            <p className="text-gray-500 text-xs mb-3">
+              Cláusula: <span className="text-orange-400 font-bold">{formatMoney(directOfferPlayer.release_clause)}</span>
+              {' · '}Tu oferta debe ser menor
+            </p>
+            <input
+              type="number"
+              placeholder="Monto de tu oferta"
+              value={directOfferAmt}
+              onChange={e => { setDirectOfferAmt(e.target.value); setDirectOfferErr('') }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 mb-1"
+            />
+            {directOfferAmt && parseInt(directOfferAmt) > 0 && (
+              <div className="text-xs text-gray-500 mb-3">
+                Saldo restante: <span className={`font-bold ${(user?.budget || 0) - parseInt(directOfferAmt) < 0 ? 'text-red-400' : 'text-white'}`}>
+                  {formatMoney((user?.budget || 0) - parseInt(directOfferAmt))}
+                </span>
+              </div>
+            )}
+            {directOfferErr && <p className="text-red-400 text-xs mb-3">{directOfferErr}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={handleDirectOffer}
+                disabled={directOfferLoading}
+                className="flex-1 disabled:opacity-50 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm"
+              >
+                {directOfferLoading ? 'Enviando...' : 'Enviar oferta'}
+              </button>
+              <button
+                onClick={() => { setDirectOfferPlayer(null); setDirectOfferAmt(''); setDirectOfferErr('') }}
                 className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium py-2.5 rounded-xl transition-colors text-sm"
               >
                 Cancelar

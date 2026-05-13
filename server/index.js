@@ -84,12 +84,76 @@ app.get('/api/stats/scorers', async (req, res) => {
 
 app.get('/api/stats/managers', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    // Base user + player count
+    const { rows: users } = await pool.query(`
       SELECT u.id, u.username, u.team_name, u.budget, COUNT(p.id)::int as player_count
       FROM users u LEFT JOIN players p ON p.owner_id = u.id
-      GROUP BY u.id ORDER BY u.budget DESC
+      GROUP BY u.id
     `);
-    res.json(rows);
+
+    // Match results per user
+    const { rows: matchRows } = await pool.query(`
+      SELECT home_id, away_id, home_score, away_score
+      FROM matches
+      WHERE home_score IS NOT NULL AND away_score IS NOT NULL
+    `);
+
+    // Finished tournaments — winner is first in standings (most pts/gd/gf)
+    const { rows: finishedT } = await pool.query(`
+      SELECT id, participant_ids FROM tournaments WHERE status = 'finished'
+    `);
+    const { rows: allMatchRows } = await pool.query(`
+      SELECT tournament_id, home_id, away_id, home_score, away_score
+      FROM matches WHERE home_score IS NOT NULL AND away_score IS NOT NULL
+    `);
+
+    // Compute stats per user
+    const stats = {};
+    for (const u of users) {
+      stats[u.id] = { ...u, wins: 0, draws: 0, losses: 0, tournaments_won: 0 };
+    }
+
+    for (const m of matchRows) {
+      if (m.home_score === null || m.away_score === null) continue;
+      const h = stats[m.home_id], a = stats[m.away_id];
+      if (h && a) {
+        if (m.home_score > m.away_score)       { h.wins++;  a.losses++; }
+        else if (m.home_score < m.away_score)  { a.wins++;  h.losses++; }
+        else                                   { h.draws++; a.draws++;  }
+      }
+    }
+
+    // Determine winner of each finished tournament
+    for (const t of finishedT) {
+      const ids = JSON.parse(t.participant_ids || '[]');
+      const tMatches = allMatchRows.filter(m => m.tournament_id === t.id);
+      const s = {};
+      for (const id of ids) s[id] = { pts: 0, gd: 0, gf: 0 };
+      for (const m of tMatches) {
+        const hh = s[m.home_id], aa = s[m.away_id];
+        if (!hh || !aa) continue;
+        hh.gf += m.home_score; hh.gd += m.home_score - m.away_score;
+        aa.gf += m.away_score; aa.gd += m.away_score - m.home_score;
+        if (m.home_score > m.away_score)      { hh.pts += 3; }
+        else if (m.home_score < m.away_score) { aa.pts += 3; }
+        else                                  { hh.pts++;  aa.pts++; }
+      }
+      const sorted = Object.entries(s).sort(([,a],[,b]) =>
+        b.pts - a.pts || b.gd - a.gd || b.gf - a.gf
+      );
+      if (sorted.length > 0) {
+        const winnerId = parseInt(sorted[0][0], 10);
+        if (stats[winnerId]) stats[winnerId].tournaments_won++;
+      }
+    }
+
+    const result = Object.values(stats).sort((a, b) =>
+      b.tournaments_won - a.tournaments_won ||
+      b.wins - a.wins ||
+      b.budget - a.budget
+    );
+
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });

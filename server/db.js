@@ -34,6 +34,12 @@ async function initDb() {
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pes6_team_index INTEGER;
 
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS purchase_count INTEGER DEFAULT 0;
+
+    ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS legs INTEGER DEFAULT 1;
+
+    ALTER TABLE clause_offers ADD COLUMN IF NOT EXISTS offer_type TEXT DEFAULT 'clause';
+
     CREATE TABLE IF NOT EXISTS players (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -103,6 +109,21 @@ async function initDb() {
       price INTEGER,
       created_at BIGINT
     );
+  `);
+
+  // Retroactive: set purchase_count from transfer history (runs safely on each startup)
+  await pool.query(`
+    UPDATE players p
+    SET purchase_count = sub.cnt
+    FROM (
+      SELECT player_id, COUNT(*)::int as cnt
+      FROM transfers
+      WHERE type = 'compra'
+      GROUP BY player_id
+    ) sub
+    WHERE p.id = sub.player_id
+      AND p.purchase_count = 0
+      AND sub.cnt > 0
   `);
 
   const defaults = [

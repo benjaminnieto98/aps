@@ -454,7 +454,7 @@ function TournamentsTab() {
   const [tournaments, setTournaments] = useState([])
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ name: '', participantIds: [], prizes: ['', '', ''] })
+  const [form, setForm] = useState({ name: '', participantIds: [], prizes: ['', '', ''], legs: 1 })
   const [msg, setMsg] = useState('')
   const [finishing, setFinishing] = useState(null)
 
@@ -486,9 +486,10 @@ function TournamentsTab() {
     }
     try {
       const prizes = form.prizes.map(p => parseInt(p) || 0)
-      await createTournament({ name: form.name, participantIds: form.participantIds, prizes })
-      flash(`Torneo "${form.name}" creado (${form.participantIds.length <= 6 ? 'todos vs todos' : 'grupos'})`)
-      setForm({ name: '', participantIds: [], prizes: ['', '', ''] })
+      await createTournament({ name: form.name, participantIds: form.participantIds, prizes, legs: form.legs })
+      const legsLabel = form.legs === 2 ? ' · Ida y vuelta' : ''
+      flash(`Torneo "${form.name}" creado (${form.participantIds.length <= 6 ? 'todos vs todos' : 'grupos'}${legsLabel})`)
+      setForm({ name: '', participantIds: [], prizes: ['', '', ''], legs: 1 })
       fetchAll()
     } catch (err) { flash(err.response?.data?.error || 'Error') }
   }
@@ -568,6 +569,19 @@ function TournamentsTab() {
           </div>
         </div>
 
+        <div>
+          <label className="flex items-center gap-3 cursor-pointer w-fit">
+            <div
+              onClick={() => setForm(prev => ({ ...prev, legs: prev.legs === 2 ? 1 : 2 }))}
+              className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 ${form.legs === 2 ? 'bg-green-500' : 'bg-gray-600'}`}
+            >
+              <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.legs === 2 ? 'translate-x-5' : 'translate-x-0'}`} />
+            </div>
+            <span className="text-white text-sm">Ida y vuelta</span>
+            <span className="text-gray-500 text-xs">{form.legs === 2 ? '(cada par juega 2 partidos)' : '(cada par juega 1 partido)'}</span>
+          </label>
+        </div>
+
         <button
           onClick={handleCreate}
           className="bg-green-500 hover:bg-green-400 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
@@ -585,7 +599,7 @@ function TournamentsTab() {
                 <div className="text-white font-medium">{t.name}</div>
                 <div className="text-gray-500 text-xs mt-0.5">
                   {t.participants?.length || 0} participantes ·{' '}
-                  {t.format === 'roundrobin' ? 'Todos vs Todos' : 'Grupos'} ·{' '}
+                  {t.format === 'roundrobin' ? 'Todos vs Todos' : 'Grupos'}{t.legs === 2 ? ' · Ida y vuelta' : ''} ·{' '}
                   <span className={t.status === 'active' ? 'text-green-400' : 'text-gray-400'}>
                     {t.status === 'active' ? 'Activo' : 'Finalizado'}
                   </span>

@@ -42,7 +42,7 @@ export default function Layout() {
           <span>{item.label}</span>
         </NavLink>
       ))}
-      {user?.is_admin && (
+      {!!user?.is_admin && (
         <NavLink
           to="/admin"
           className={({ isActive }) =>

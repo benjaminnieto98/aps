@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { getMyPlayers, getTournaments, getMatches, getScorers } from '../api'
+import { getMyPlayers, getTournaments, getMatches, getScorers, getPublicConfig } from '../api'
 import { formatMoney } from '../utils/format'
 
 function StatCard({ label, value, sub }) {
@@ -20,9 +20,11 @@ export default function Dashboard() {
   const [standings, setStandings] = useState([])
   const [scorers, setScorers] = useState([])
   const [activeTournament, setActiveTournament] = useState(null)
+  const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    getPublicConfig().then(r => setConfig(r.data)).catch(console.error)
     Promise.all([getMyPlayers(), getTournaments(), getScorers()])
       .then(([pRes, tRes, sRes]) => {
         setPlayers(pRes.data)
@@ -77,7 +79,7 @@ export default function Dashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Presupuesto" value={formatMoney(user?.budget)} />
-        <StatCard label="Plantel" value={`${players.length}`} sub={`máximo 22 jugadores`} />
+        <StatCard label="Plantel" value={`${players.length}`} sub={`máximo ${config?.maxRoster ?? 22} jugadores`} />
         <StatCard label="Equipo" value={user?.team_name || '—'} sub="equipo asignado" />
         <StatCard
           label="Torneos Activos"

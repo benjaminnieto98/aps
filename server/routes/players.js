@@ -23,8 +23,9 @@ function calcPrice(player, cfg) {
   const posMult   = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
   const threshold = parseInt(cfg.rating_threshold   || '80',  10);
   const lowMult   = parseFloat(cfg.low_rating_mult  || '0.5');
-  const ratingMult = player.rating < threshold ? lowMult : 1.0;
-  return Math.round(player.rating * player.rating * base * posMult * ratingMult);
+  const ratingMult    = player.rating < threshold ? lowMult : 1.0;
+  const purchaseBoost = Math.pow(1.1, player.purchase_count || 0);
+  return Math.round(player.rating * player.rating * base * posMult * ratingMult * purchaseBoost);
 }
 
 // Fetches config once then calls calcPrice
@@ -324,6 +325,79 @@ router.post('/:id/release', authenticate, async (req, res) => {
   }
 });
 
+// POST /api/players/:id/offer  { amount }  — oferta por debajo de la cláusula (dueño acepta/rechaza)
+router.post('/:id/offer', authenticate, async (req, res) => {
+  const playerId = req.params.id;
+  const { amount } = req.body;
+
+  if (!amount || !Number.isInteger(Number(amount)) || Number(amount) <= 0) {
+    return res.status(400).json({ error: 'El monto debe ser un número entero positivo' });
+  }
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM players WHERE id = $1', [playerId]);
+    if (!rows[0]) return res.status(404).json({ error: 'Jugador no encontrado' });
+    const player = rows[0];
+
+    if (!player.owner_id) return res.status(400).json({ error: 'El jugador no tiene dueño' });
+    if (player.owner_id === req.user.id) return res.status(400).json({ error: 'No podés hacerte una oferta a vos mismo' });
+
+    const { rows: cfgRows } = await pool.query(
+      `SELECT key, value FROM config WHERE key IN (${PRICE_CONFIG_KEYS})`
+    );
+    const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]));
+    const basePrice  = calcPrice(player, cfg);
+    const clauseVal  = player.release_clause ?? basePrice;
+    const offerAmt   = parseInt(amount, 10);
+
+    if (offerAmt >= clauseVal) {
+      return res.status(400).json({
+        error: `Para pagar la cláusula completa (${clauseVal.toLocaleString()}) usá "Activar cláusula"`
+      });
+    }
+
+    const { rows: buyerRows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    const buyer = buyerRows[0];
+    if (buyer.budget < offerAmt) return res.status(400).json({ error: 'Presupuesto insuficiente' });
+
+    const { rows: cfgMax } = await pool.query("SELECT value FROM config WHERE key = 'max_roster'");
+    const maxRoster = cfgMax[0] ? parseInt(cfgMax[0].value, 10) : 22;
+    const { rows: rosterRows } = await pool.query(
+      'SELECT COUNT(*)::int as cnt FROM players WHERE owner_id = $1', [req.user.id]
+    );
+    if (rosterRows[0].cnt >= maxRoster) {
+      return res.status(400).json({ error: `Ya tenés el plantel lleno (máx. ${maxRoster})` });
+    }
+
+    // Check no duplicate pending direct offer
+    const { rows: existOffer } = await pool.query(
+      "SELECT id FROM clause_offers WHERE player_id = $1 AND buyer_id = $2 AND status = 'pending' AND offer_type = 'offer'",
+      [playerId, req.user.id]
+    );
+    if (existOffer[0]) return res.status(400).json({ error: 'Ya tenés una oferta pendiente para este jugador' });
+
+    const { rows: ownerRows } = await pool.query('SELECT id, username FROM users WHERE id = $1', [player.owner_id]);
+    const owner = ownerRows[0];
+
+    await pool.query(`
+      INSERT INTO clause_offers
+        (player_id, player_name, player_rating, player_position,
+         buyer_id, buyer_username, owner_id, owner_username, clause_amount, offer_type, created_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'offer',$10)
+    `, [
+      player.id, player.name, player.rating, player.position,
+      req.user.id, buyer.username,
+      owner.id, owner.username,
+      offerAmt, Date.now()
+    ]);
+
+    res.json({ success: true, message: 'Oferta enviada. El dueño puede aceptarla o rechazarla.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
 // POST /api/players/:id/buy
 router.post('/:id/buy', authenticate, async (req, res) => {
   const playerId = req.params.id;
@@ -427,7 +501,7 @@ router.post('/:id/buy', authenticate, async (req, res) => {
         await client.query('UPDATE users SET budget = budget + $1 WHERE id = $2', [price, player.owner_id]);
       }
       await client.query(
-        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL WHERE id = $2',
+        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1 WHERE id = $2',
         [req.user.id, playerId]
       );
       await logTransfer({ type: 'compra', player, from: sellerUser, to: buyerUser, price, _client: client });

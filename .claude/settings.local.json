@@ -41,7 +41,8 @@
       "Bash(python pes6_of.py KONAMI-WIN32PES6OPT --apply aps_export.json --output KONAMI-WIN32PES6OPT_APS)",
       "Bash(python pes6_of.py KONAMI-WIN32PES6OPT_APS --verify)",
       "Bash(python pes6_of.py KONAMI-WIN32PES6OPT_APS --read-squad 110)",
-      "Bash(python pes6_of.py KONAMI-WIN32PES6OPT_APS --read-squad 6)"
+      "Bash(python pes6_of.py KONAMI-WIN32PES6OPT_APS --read-squad 6)",
+      "Bash(npm run *)"
     ]
   }
 }

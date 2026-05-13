@@ -136,7 +136,7 @@ export default function Stats() {
       {tab === 'managers' && (
         <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-800">
-            <h2 className="text-white font-semibold text-sm">Ranking de Managers — Por Presupuesto</h2>
+            <h2 className="text-white font-semibold text-sm">Ranking de Managers — Por Torneos Ganados</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -145,7 +145,10 @@ export default function Stats() {
                   <th className="px-4 py-2 text-left">#</th>
                   <th className="px-4 py-2 text-left">Usuario</th>
                   <th className="px-4 py-2 text-left">Equipo</th>
-                  <th className="px-4 py-2 text-center">Jugadores</th>
+                  <th className="px-4 py-2 text-center" title="Torneos ganados">🏆</th>
+                  <th className="px-4 py-2 text-center">G</th>
+                  <th className="px-4 py-2 text-center">E</th>
+                  <th className="px-4 py-2 text-center">P</th>
                   <th className="px-4 py-2 text-right">Presupuesto</th>
                 </tr>
               </thead>
@@ -157,7 +160,14 @@ export default function Stats() {
                     </td>
                     <td className="px-4 py-3 text-white font-medium">{m.username}</td>
                     <td className="px-4 py-3 text-gray-400">{m.team_name || '—'}</td>
-                    <td className="px-4 py-3 text-center text-gray-400">{m.player_count}</td>
+                    <td className="px-4 py-3 text-center">
+                      {m.tournaments_won > 0
+                        ? <span className="text-yellow-400 font-bold">{m.tournaments_won}</span>
+                        : <span className="text-gray-600">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center text-green-400 font-medium">{m.wins ?? 0}</td>
+                    <td className="px-4 py-3 text-center text-gray-400">{m.draws ?? 0}</td>
+                    <td className="px-4 py-3 text-center text-red-400">{m.losses ?? 0}</td>
                     <td className="px-4 py-3 text-right text-green-400 font-bold">{formatMoney(m.budget)}</td>
                   </tr>
                 ))}

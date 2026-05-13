@@ -322,25 +322,38 @@ function ReceivedOffers({ onRefresh }) {
     <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 space-y-3">
       <h2 className="text-orange-300 font-semibold text-sm flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
-        Ofertas de cláusula recibidas ({offers.length})
+        Ofertas recibidas ({offers.length})
       </h2>
       {msg && <div className="text-green-400 text-xs bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">{msg}</div>}
-      {offers.map(o => (
+      {offers.map(o => {
+        const isDirectOffer = o.offer_type === 'offer'
+        return (
         <div key={o.id} className="bg-gray-900 rounded-xl p-4 border border-gray-700 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-white font-semibold">{o.player_name}</span>
                 <span className="text-yellow-400 text-xs font-bold">{o.player_rating}</span>
                 <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{o.player_position}</span>
+                {isDirectOffer
+                  ? <span className="text-blue-400 text-xs border border-blue-400/30 bg-blue-400/10 px-1.5 py-0.5 rounded">Oferta directa</span>
+                  : <span className="text-orange-400 text-xs border border-orange-400/30 bg-orange-400/10 px-1.5 py-0.5 rounded">Ejecución de cláusula</span>
+                }
               </div>
               <div className="text-gray-400 text-xs mt-0.5">
-                Oferta de <span className="text-white">{o.buyer_username}</span> · cláusula {formatMoney(o.clause_amount)}
+                {isDirectOffer
+                  ? <>Oferta de <span className="text-white">{o.buyer_username}</span> — <span className="text-blue-400 font-bold">{formatMoney(o.clause_amount)}</span></>
+                  : <>Cláusula ejecutada por <span className="text-white">{o.buyer_username}</span> — <span className="text-orange-400 font-bold">{formatMoney(o.clause_amount)}</span></>
+                }
               </div>
             </div>
-            <div className="text-orange-400 font-bold text-lg">{formatMoney(o.clause_amount)}</div>
+            <div className={`font-bold text-lg ${isDirectOffer ? 'text-blue-400' : 'text-orange-400'}`}>
+              {formatMoney(o.clause_amount)}
+            </div>
           </div>
 
+          {/* Raise input — only for clause executions, not direct offers */}
+          {!isDirectOffer && (
           <div className="flex gap-2">
             <input
               type="number"
@@ -357,13 +370,21 @@ function ReceivedOffers({ onRefresh }) {
               Subir y rechazar
             </button>
           </div>
+          )}
 
-          <button onClick={() => handleAccept(o.id)} disabled={loading}
-            className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
-            Aceptar transferencia
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => handleAccept(o.id)} disabled={loading}
+              className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
+              {isDirectOffer ? 'Aceptar oferta' : 'Aceptar transferencia'}
+            </button>
+            <button onClick={() => handleReject(o.id)} disabled={loading}
+              className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
+              Rechazar
+            </button>
+          </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

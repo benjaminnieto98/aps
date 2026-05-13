@@ -87,7 +87,7 @@ router.post('/:id/accept', authenticate, async (req, res) => {
       await client.query('UPDATE users SET budget = budget - $1 WHERE id = $2', [offer.clause_amount, buyer.id]);
       await client.query('UPDATE users SET budget = budget + $1 WHERE id = $2', [offer.clause_amount, req.user.id]);
       await client.query(
-        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL WHERE id = $2',
+        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1 WHERE id = $2',
         [buyer.id, offer.player_id]
       );
       await client.query(
@@ -124,6 +124,7 @@ router.post('/:id/raise', authenticate, async (req, res) => {
 
     if (offer.owner_id !== req.user.id) return res.status(403).json({ error: 'No sos el dueño del jugador' });
     if (offer.status !== 'pending') return res.status(400).json({ error: 'La oferta ya fue resuelta' });
+    if (offer.offer_type === 'offer') return res.status(400).json({ error: 'Solo podés aceptar o rechazar una oferta directa' });
 
     const MIN_RAISE = 1_000_000;
     const newAmt = parseInt(newAmount, 10);
@@ -183,6 +184,98 @@ router.post('/:id/reject', authenticate, async (req, res) => {
 
     await pool.query(
       "UPDATE clause_offers SET status = 'rejected', resolved_at = $1 WHERE id = $2",
+      [Date.now(), offerId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// POST /api/clause-offers/:id/accept-raised — buyer pays the raised clause amount
+router.post('/:id/accept-raised', authenticate, async (req, res) => {
+  const offerId = parseInt(req.params.id, 10);
+
+  try {
+    const { rows: offerRows } = await pool.query('SELECT * FROM clause_offers WHERE id = $1', [offerId]);
+    if (!offerRows[0]) return res.status(404).json({ error: 'Oferta no encontrada' });
+    const offer = offerRows[0];
+
+    if (offer.buyer_id !== req.user.id) return res.status(403).json({ error: 'No sos el comprador de esta oferta' });
+    if (offer.status !== 'raised') return res.status(400).json({ error: 'La oferta no está en estado "subida"' });
+    if (!offer.new_clause_amount) return res.status(400).json({ error: 'No hay monto nuevo definido' });
+
+    const { rows: playerRows } = await pool.query('SELECT * FROM players WHERE id = $1', [offer.player_id]);
+    if (!playerRows[0]) return res.status(404).json({ error: 'Jugador no encontrado' });
+    const player = playerRows[0];
+    if (player.owner_id !== offer.owner_id) return res.status(400).json({ error: 'El jugador ya cambió de dueño' });
+
+    const { rows: buyerRows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    const buyer = buyerRows[0];
+    if (buyer.budget < offer.new_clause_amount) {
+      return res.status(400).json({ error: 'Presupuesto insuficiente para pagar la cláusula aumentada' });
+    }
+
+    const { rows: cfgMin } = await pool.query("SELECT value FROM config WHERE key = 'min_roster'");
+    const minRoster = cfgMin[0] ? parseInt(cfgMin[0].value, 10) : 18;
+    const { rows: sellerCnt } = await pool.query(
+      'SELECT COUNT(*)::int as cnt FROM players WHERE owner_id = $1', [offer.owner_id]
+    );
+    if (sellerCnt[0].cnt <= minRoster) {
+      return res.status(400).json({ error: `El vendedor no puede quedar con menos de ${minRoster} jugadores` });
+    }
+
+    const { rows: cfgMax } = await pool.query("SELECT value FROM config WHERE key = 'max_roster'");
+    const maxRoster = cfgMax[0] ? parseInt(cfgMax[0].value, 10) : 22;
+    const { rows: buyerCnt } = await pool.query(
+      'SELECT COUNT(*)::int as cnt FROM players WHERE owner_id = $1', [req.user.id]
+    );
+    if (buyerCnt[0].cnt >= maxRoster) {
+      return res.status(400).json({ error: 'Ya tenés el plantel lleno' });
+    }
+
+    const { rows: ownerRows } = await pool.query('SELECT id, username FROM users WHERE id = $1', [offer.owner_id]);
+    const owner = ownerRows[0];
+    const now = Date.now();
+
+    await withTransaction(async (client) => {
+      await client.query('UPDATE users SET budget = budget - $1 WHERE id = $2', [offer.new_clause_amount, req.user.id]);
+      await client.query('UPDATE users SET budget = budget + $1 WHERE id = $2', [offer.new_clause_amount, offer.owner_id]);
+      await client.query(
+        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1 WHERE id = $2',
+        [req.user.id, offer.player_id]
+      );
+      await client.query(
+        "UPDATE clause_offers SET status = 'accepted', resolved_at = $1 WHERE id = $2",
+        [now, offerId]
+      );
+      await logTransfer({ type: 'compra', player, from: owner, to: buyer, price: offer.new_clause_amount, _client: client });
+    });
+
+    res.json({ success: true, price: offer.new_clause_amount });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
+// POST /api/clause-offers/:id/cancel — buyer withdraws from a raised offer
+router.post('/:id/cancel', authenticate, async (req, res) => {
+  const offerId = parseInt(req.params.id, 10);
+
+  try {
+    const { rows: offerRows } = await pool.query('SELECT * FROM clause_offers WHERE id = $1', [offerId]);
+    if (!offerRows[0]) return res.status(404).json({ error: 'Oferta no encontrada' });
+    const offer = offerRows[0];
+
+    if (offer.buyer_id !== req.user.id) return res.status(403).json({ error: 'No sos el comprador de esta oferta' });
+    if (!['pending', 'raised'].includes(offer.status)) {
+      return res.status(400).json({ error: 'La oferta ya fue resuelta' });
+    }
+
+    await pool.query(
+      "UPDATE clause_offers SET status = 'cancelled', resolved_at = $1 WHERE id = $2",
       [Date.now(), offerId]
     );
     res.json({ success: true });

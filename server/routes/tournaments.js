@@ -64,35 +64,46 @@ router.get('/', async (req, res) => {
 router.post('/', authenticate, async (req, res) => {
   if (!req.user.is_admin) return res.status(403).json({ error: 'Solo administradores' });
 
-  const { name, participantIds, prizes } = req.body;
+  const { name, participantIds, prizes, legs } = req.body;
   if (!name || !participantIds || participantIds.length < 2) {
     return res.status(400).json({ error: 'Nombre y al menos 2 participantes requeridos' });
   }
 
+  const legsCount = (legs === 2 || legs === '2') ? 2 : 1;
   const format = participantIds.length <= 6 ? 'roundrobin' : 'groups';
 
   try {
     const { id: tournamentId, format: fmt } = await withTransaction(async (client) => {
       const { rows } = await client.query(
-        `INSERT INTO tournaments (name, format, status, participant_ids, prizes, created_at)
-         VALUES ($1, $2, 'active', $3, $4, $5) RETURNING id`,
-        [name, format, JSON.stringify(participantIds), JSON.stringify(prizes || [0, 0, 0]), Date.now()]
+        `INSERT INTO tournaments (name, format, status, participant_ids, prizes, legs, created_at)
+         VALUES ($1, $2, 'active', $3, $4, $5, $6) RETURNING id`,
+        [name, format, JSON.stringify(participantIds), JSON.stringify(prizes || [0, 0, 0]), legsCount, Date.now()]
       );
       const tId = rows[0].id;
 
-      async function insertMatches(rounds) {
+      async function insertMatches(rounds, roundOffset = 0, namePrefix = 'Fecha') {
         for (let idx = 0; idx < rounds.length; idx++) {
+          const roundNum  = roundOffset + idx + 1;
+          const roundName = `${namePrefix} ${roundNum}`;
           for (const match of rounds[idx]) {
             await client.query(
               'INSERT INTO matches (tournament_id, round_number, round_name, home_id, away_id) VALUES ($1,$2,$3,$4,$5)',
-              [tId, idx + 1, `Fecha ${idx + 1}`, match.home, match.away]
+              [tId, roundNum, roundName, match.home, match.away]
             );
           }
         }
       }
 
+      async function insertMatchesWithLegs(rounds, namePrefix = 'Fecha') {
+        await insertMatches(rounds, 0, `${namePrefix} (Ida)`);
+        if (legsCount === 2) {
+          const returnRounds = rounds.map(r => r.map(m => ({ home: m.away, away: m.home })));
+          await insertMatches(returnRounds, rounds.length, `${namePrefix} (Vuelta)`);
+        }
+      }
+
       if (format === 'roundrobin') {
-        await insertMatches(generateRoundRobin(participantIds));
+        await insertMatchesWithLegs(generateRoundRobin(participantIds));
       } else {
         const shuffled = [...participantIds].sort(() => Math.random() - 0.5);
         const half = Math.ceil(shuffled.length / 2);
@@ -100,26 +111,12 @@ router.post('/', authenticate, async (req, res) => {
         const groupB = shuffled.slice(half);
 
         const roundsA = generateRoundRobin(groupA);
-        for (let idx = 0; idx < roundsA.length; idx++) {
-          for (const match of roundsA[idx]) {
-            await client.query(
-              'INSERT INTO matches (tournament_id, round_number, round_name, home_id, away_id) VALUES ($1,$2,$3,$4,$5)',
-              [tId, idx + 1, `Grupo A – Fecha ${idx + 1}`, match.home, match.away]
-            );
-          }
-        }
+        await insertMatchesWithLegs(roundsA, 'Grupo A – Fecha');
         const roundsB = generateRoundRobin(groupB);
-        for (let idx = 0; idx < roundsB.length; idx++) {
-          for (const match of roundsB[idx]) {
-            await client.query(
-              'INSERT INTO matches (tournament_id, round_number, round_name, home_id, away_id) VALUES ($1,$2,$3,$4,$5)',
-              [tId, idx + 1, `Grupo B – Fecha ${idx + 1}`, match.home, match.away]
-            );
-          }
-        }
+        await insertMatchesWithLegs(roundsB, 'Grupo B – Fecha');
       }
 
-      return { id: tId, format };
+      return { id: tId, format, legs: legsCount };
     });
 
     res.json({ success: true, id: tournamentId, format: fmt });
