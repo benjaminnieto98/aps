@@ -42,7 +42,10 @@
       "Bash(python pes6_of.py KONAMI-WIN32PES6OPT_APS --verify)",
       "Bash(python pes6_of.py KONAMI-WIN32PES6OPT_APS --read-squad 110)",
       "Bash(python pes6_of.py KONAMI-WIN32PES6OPT_APS --read-squad 6)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(dir /s /b \"C:\\\\Users\\\\benja\\\\KONAMI-WIN32PES6OPT\")",
+      "Bash(dir /s /b \"C:\\\\Users\\\\benja\\\\Documents\\\\*PES*\")",
+      "Bash(dir /s /b \"C:\\\\Users\\\\benja\\\\AppData\\\\Local\\\\KONAMI*\")"
     ]
   }
 }

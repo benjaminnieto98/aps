@@ -202,6 +202,69 @@ app.get('/api/stats/records', async (req, res) => {
   }
 });
 
+app.get('/api/stats/h2h', async (req, res) => {
+  const { user1, user2 } = req.query;
+  if (!user1 || !user2) return res.status(400).json({ error: 'Se requieren user1 y user2' });
+
+  const u1 = parseInt(user1, 10);
+  const u2 = parseInt(user2, 10);
+
+  try {
+    const [u1Row, u2Row, matchRows] = await Promise.all([
+      pool.query('SELECT id, username, team_name FROM users WHERE id = $1', [u1]),
+      pool.query('SELECT id, username, team_name FROM users WHERE id = $1', [u2]),
+      pool.query(`
+        SELECT m.id, m.home_id, m.away_id, m.home_score, m.away_score,
+               m.round_name, m.played_at,
+               t.name as tournament_name
+        FROM matches m
+        LEFT JOIN tournaments t ON m.tournament_id = t.id
+        WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+          AND ((m.home_id = $1 AND m.away_id = $2) OR (m.home_id = $2 AND m.away_id = $1))
+        ORDER BY m.played_at ASC, m.id ASC
+      `, [u1, u2])
+    ]);
+
+    if (!u1Row.rows[0] || !u2Row.rows[0]) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    const matches = matchRows.rows;
+    const stats = {
+      [u1]: { wins: 0, draws: 0, losses: 0, gf: 0, ga: 0 },
+      [u2]: { wins: 0, draws: 0, losses: 0, gf: 0, ga: 0 },
+    };
+
+    for (const m of matches) {
+      const isU1Home = m.home_id === u1;
+      const u1gf = isU1Home ? m.home_score : m.away_score;
+      const u2gf = isU1Home ? m.away_score : m.home_score;
+      stats[u1].gf += u1gf; stats[u1].ga += u2gf;
+      stats[u2].gf += u2gf; stats[u2].ga += u1gf;
+      if (u1gf > u2gf)      { stats[u1].wins++;  stats[u2].losses++; }
+      else if (u1gf < u2gf) { stats[u2].wins++;  stats[u1].losses++; }
+      else                  { stats[u1].draws++; stats[u2].draws++;  }
+    }
+
+    res.json({
+      user1: { ...u1Row.rows[0], ...stats[u1] },
+      user2: { ...u2Row.rows[0], ...stats[u2] },
+      matches: matches.map(m => ({
+        id: m.id,
+        home_id:   m.home_id,
+        away_id:   m.away_id,
+        home_score: m.home_score,
+        away_score: m.away_score,
+        round_name: m.round_name,
+        tournament_name: m.tournament_name,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
 // Serve compiled React app (production)
 const clientDist = path.join(__dirname, '../client/dist');
 if (fs.existsSync(path.join(clientDist, 'index.html'))) {

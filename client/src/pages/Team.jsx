@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getMyPlayers, listPlayer, unlistPlayer, setClause, removeClause, releasePlayer, getPublicConfig, getReceivedOffers, acceptOffer, raiseClauseOffer, rejectOffer } from '../api'
 import { formatMoney, positionOrder, positionLabel, ratingColor } from '../utils/format'
 
-function PlayerCard({ player, onRefresh, config, rosterCount, minRoster }) {
+function PlayerCard({ player, onRefresh, config, rosterCount, minRoster, navigate }) {
   const [showListModal, setShowListModal]       = useState(false)
   const [showClauseModal, setShowClauseModal]   = useState(false)
   const [showReleaseModal, setShowReleaseModal] = useState(false)
@@ -74,7 +75,10 @@ function PlayerCard({ player, onRefresh, config, rosterCount, minRoster }) {
       {/* Header */}
       <div className="flex items-start justify-between mb-1">
         <div className="flex-1 min-w-0">
-          <div className="text-white font-semibold text-sm truncate">{player.name}</div>
+          <div
+            className="text-white font-semibold text-sm truncate cursor-pointer hover:text-green-400 transition-colors"
+            onClick={() => navigate(`/player/${player.id}`)}
+          >{player.name}</div>
           <div className="text-gray-400 text-xs">{player.nationality}</div>
         </div>
         <div className={`text-lg font-bold ml-2 ${ratingColor(player.rating)}`}>{player.rating}</div>
@@ -390,6 +394,7 @@ function ReceivedOffers({ onRefresh }) {
 }
 
 export default function Team() {
+  const navigate = useNavigate()
   const [players, setPlayers] = useState([])
   const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -459,6 +464,7 @@ export default function Team() {
                 <PlayerCard
                   key={p.id} player={p} onRefresh={fetchPlayers}
                   config={config} rosterCount={players.length} minRoster={minRoster}
+                  navigate={navigate}
                 />
               ))}
             </div>

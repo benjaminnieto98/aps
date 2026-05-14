@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getScorers, getManagers, getRecords } from '../api'
+import { getScorers, getManagers, getRecords, getH2H } from '../api'
 import { formatMoney, ratingColor } from '../utils/format'
 
 function RecordCard({ label, children, accent = 'green' }) {
@@ -37,6 +37,154 @@ function MiniRanking({ items, valueKey, label, accent = 'green' }) {
   )
 }
 
+function H2HTab({ managers }) {
+  const [sel1, setSel1] = useState('')
+  const [sel2, setSel2] = useState('')
+  const [h2h, setH2H]   = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState('')
+
+  const load = async () => {
+    if (!sel1 || !sel2 || sel1 === sel2) return setError('Seleccioná dos usuarios distintos')
+    setLoading(true); setError(''); setH2H(null)
+    try {
+      const res = await getH2H(sel1, sel2)
+      setH2H(res.data)
+    } catch (err) { setError(err.response?.data?.error || 'Error') }
+    finally { setLoading(false) }
+  }
+
+  const u1 = h2h?.user1
+  const u2 = h2h?.user2
+
+  const resultColor = (w, l) => {
+    if (w > l) return 'text-green-400'
+    if (w < l) return 'text-red-400'
+    return 'text-gray-300'
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Selector */}
+      <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[140px]">
+            <label className="text-gray-500 text-xs block mb-1">Equipo 1</label>
+            <select
+              value={sel1}
+              onChange={e => { setSel1(e.target.value); setH2H(null) }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
+            >
+              <option value="">— Elegir —</option>
+              {managers.map(m => (
+                <option key={m.id} value={m.id}>{m.team_name || m.username}</option>
+              ))}
+            </select>
+          </div>
+          <div className="text-gray-500 font-bold text-lg pb-2">vs</div>
+          <div className="flex-1 min-w-[140px]">
+            <label className="text-gray-500 text-xs block mb-1">Equipo 2</label>
+            <select
+              value={sel2}
+              onChange={e => { setSel2(e.target.value); setH2H(null) }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
+            >
+              <option value="">— Elegir —</option>
+              {managers.filter(m => String(m.id) !== String(sel1)).map(m => (
+                <option key={m.id} value={m.id}>{m.team_name || m.username}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={load}
+            disabled={loading || !sel1 || !sel2}
+            className="bg-green-500 hover:bg-green-400 disabled:opacity-40 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+          >
+            {loading ? 'Cargando...' : 'Ver historial'}
+          </button>
+        </div>
+        {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
+      </div>
+
+      {/* Results */}
+      {h2h && (
+        <>
+          {/* Head-to-head summary */}
+          <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+            <div className="grid grid-cols-3 gap-2 items-center text-center">
+              {/* Team 1 */}
+              <div>
+                <div className="text-white font-bold text-base truncate">{u1.team_name || u1.username}</div>
+                <div className="text-gray-500 text-xs">{u1.username}</div>
+                <div className={`text-4xl font-black mt-2 ${resultColor(u1.wins, u1.losses)}`}>{u1.wins}</div>
+                <div className="text-gray-500 text-xs">victorias</div>
+              </div>
+
+              {/* Middle stats */}
+              <div className="space-y-2">
+                <div className="text-gray-400 text-xs font-medium uppercase tracking-wide">Empates</div>
+                <div className="text-white text-3xl font-bold">{u1.draws}</div>
+                <div className="border-t border-gray-700 pt-2 mt-2 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                  <div>PJ</div><div>{h2h.matches.length}</div>
+                  <div className="text-left truncate">{u1.team_name || u1.username}</div>
+                  <div className="font-semibold text-white">{u1.gf} goles</div>
+                  <div className="text-left truncate">{u2.team_name || u2.username}</div>
+                  <div className="font-semibold text-white">{u2.gf} goles</div>
+                </div>
+              </div>
+
+              {/* Team 2 */}
+              <div>
+                <div className="text-white font-bold text-base truncate">{u2.team_name || u2.username}</div>
+                <div className="text-gray-500 text-xs">{u2.username}</div>
+                <div className={`text-4xl font-black mt-2 ${resultColor(u2.wins, u2.losses)}`}>{u2.wins}</div>
+                <div className="text-gray-500 text-xs">victorias</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Match list */}
+          {h2h.matches.length === 0 ? (
+            <div className="text-gray-500 text-center py-8 text-sm">No hay partidos jugados entre estos equipos</div>
+          ) : (
+            <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-800">
+                <h3 className="text-white font-semibold text-sm">Historial de partidos</h3>
+              </div>
+              <div className="divide-y divide-gray-800/50">
+                {h2h.matches.map(m => {
+                  const u1IsHome = m.home_id === u1.id
+                  const u1Score  = u1IsHome ? m.home_score : m.away_score
+                  const u2Score  = u1IsHome ? m.away_score : m.home_score
+                  const winner   = u1Score > u2Score ? 'u1' : u1Score < u2Score ? 'u2' : 'draw'
+                  return (
+                    <div key={m.id} className="flex items-center px-4 py-3 gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-gray-500 text-xs">{m.tournament_name}{m.round_name ? ` · ${m.round_name}` : ''}</div>
+                      </div>
+                      <div className={`text-sm font-semibold truncate ${winner === 'u1' ? 'text-green-400' : winner === 'draw' ? 'text-gray-300' : 'text-gray-400'}`}>
+                        {u1.team_name || u1.username}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className={`text-lg font-black w-6 text-center ${winner === 'u1' ? 'text-green-400' : 'text-gray-300'}`}>{u1Score}</span>
+                        <span className="text-gray-600 text-sm">-</span>
+                        <span className={`text-lg font-black w-6 text-center ${winner === 'u2' ? 'text-green-400' : 'text-gray-300'}`}>{u2Score}</span>
+                      </div>
+                      <div className={`text-sm font-semibold truncate text-right ${winner === 'u2' ? 'text-green-400' : winner === 'draw' ? 'text-gray-300' : 'text-gray-400'}`}>
+                        {u2.team_name || u2.username}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function Stats() {
   const navigate = useNavigate()
   const [scorers, setScorers] = useState([])
@@ -62,6 +210,7 @@ export default function Stats() {
     { id: 'scorers',  label: 'Goleadores' },
     { id: 'managers', label: 'Managers' },
     { id: 'records',  label: 'Tabla de Honor' },
+    { id: 'h2h',      label: 'Face a Face' },
   ]
 
   return (
@@ -176,6 +325,9 @@ export default function Stats() {
           </div>
         </div>
       )}
+
+      {/* Face a Face */}
+      {tab === 'h2h' && <H2HTab managers={managers} />}
 
       {/* Hall of Fame */}
       {tab === 'records' && (

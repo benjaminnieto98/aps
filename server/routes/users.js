@@ -192,20 +192,24 @@ router.delete('/:id', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/users/:id/budget
+// POST /api/users/:id/budget  { delta }  — suma o descuenta del presupuesto actual
 router.post('/:id/budget', authenticate, async (req, res) => {
   if (!req.user.is_admin) return res.status(403).json({ error: 'Solo administradores' });
 
   const userId = parseInt(req.params.id, 10);
-  const { amount } = req.body;
+  const { delta } = req.body;
 
-  if (amount === undefined || amount === null || isNaN(Number(amount))) {
-    return res.status(400).json({ error: 'Monto inválido' });
+  if (delta === undefined || delta === null || isNaN(Number(delta)) || Number(delta) === 0) {
+    return res.status(400).json({ error: 'Delta inválido (no puede ser 0)' });
   }
 
   try {
-    await pool.query('UPDATE users SET budget = $1 WHERE id = $2', [parseInt(amount, 10), userId]);
-    res.json({ success: true });
+    const { rows } = await pool.query(
+      'UPDATE users SET budget = budget + $1 WHERE id = $2 RETURNING budget',
+      [parseInt(delta, 10), userId]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Usuario no encontrado' });
+    res.json({ success: true, newBudget: rows[0].budget });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });

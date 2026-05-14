@@ -36,11 +36,14 @@ function UsersTab() {
   }
 
   const handleSetBudget = async (id) => {
-    const amount = editBudget[id]
-    if (amount === undefined || amount === '') return
+    const delta = editBudget[id]
+    if (delta === undefined || delta === '') return
+    const d = parseInt(delta)
+    if (isNaN(d) || d === 0) return flash('Ingresá un monto distinto de 0 (positivo o negativo)')
     try {
-      await setBudget(id, parseInt(amount))
-      flash('Presupuesto actualizado')
+      const res = await setBudget(id, d)
+      const sign = d > 0 ? '+' : ''
+      flash(`Presupuesto ajustado (${sign}${d.toLocaleString()}) → nuevo total: ${formatMoney(res.data.newBudget)}`)
       fetchUsers()
       setEditBudget(prev => ({ ...prev, [id]: '' }))
     } catch (err) { flash(err.response?.data?.error || 'Error') }
@@ -121,7 +124,7 @@ function UsersTab() {
               <th className="px-3 py-2 text-center">Jugadores</th>
               <th className="px-3 py-2 text-center">Admin</th>
               <th className="px-3 py-2 text-left">Asignar Equipo</th>
-              <th className="px-3 py-2 text-left">Editar Presupuesto</th>
+              <th className="px-3 py-2 text-left">+/− Presupuesto</th>
               <th className="px-3 py-2 text-center">PES6 idx</th>
               <th className="px-3 py-2 text-center">Acciones</th>
             </tr>
@@ -164,10 +167,10 @@ function UsersTab() {
                   </div>
                 </td>
                 <td className="px-3 py-2.5">
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 items-center">
                     <input
                       type="number"
-                      placeholder="Monto"
+                      placeholder="+500000"
                       value={editBudget[u.id] || ''}
                       onChange={e => setEditBudget(prev => ({ ...prev, [u.id]: e.target.value }))}
                       className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs w-28 focus:outline-none focus:border-green-500"

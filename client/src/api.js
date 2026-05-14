@@ -34,7 +34,7 @@ export const getUsers = () => api.get('/users')
 export const assignTeam = (id, teamName) => api.post(`/users/${id}/assign-team`, { teamName })
 export const resetTeam = (id) => api.post(`/users/${id}/reset-team`)
 export const deleteUser = (id) => api.delete(`/users/${id}`)
-export const setBudget = (id, amount) => api.post(`/users/${id}/budget`, { amount })
+export const setBudget = (id, delta) => api.post(`/users/${id}/budget`, { delta })
 export const toggleAdmin = (id) => api.post(`/users/${id}/toggle-admin`)
 export const setPes6Index = (id, teamIndex) => api.post(`/users/${id}/pes6-index`, { teamIndex })
 export const exportOptionFile = () => api.get('/users/export-of')
@@ -75,5 +75,6 @@ export const getPlayerProfile = (id) => api.get(`/players/${id}/profile`)
 
 // Stats records
 export const getRecords = () => api.get('/stats/records')
+export const getH2H = (user1, user2) => api.get('/stats/h2h', { params: { user1, user2 } })
 
 export default api
