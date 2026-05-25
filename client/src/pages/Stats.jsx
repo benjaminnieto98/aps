@@ -285,7 +285,7 @@ export default function Stats() {
       {tab === 'managers' && (
         <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-800">
-            <h2 className="text-white font-semibold text-sm">Ranking de Managers — Por Torneos Ganados</h2>
+            <h2 className="text-white font-semibold text-sm">Ranking de Managers — 🏆 Liga · 🥇 Copa · ⭐ Supercopa</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -294,7 +294,9 @@ export default function Stats() {
                   <th className="px-4 py-2 text-left">#</th>
                   <th className="px-4 py-2 text-left">Usuario</th>
                   <th className="px-4 py-2 text-left">Equipo</th>
-                  <th className="px-4 py-2 text-center" title="Torneos ganados">🏆</th>
+                  <th className="px-4 py-2 text-center" title="Ligas ganadas">🏆</th>
+                  <th className="px-4 py-2 text-center" title="Copas ganadas">🥇</th>
+                  <th className="px-4 py-2 text-center" title="Supercopas ganadas">⭐</th>
                   <th className="px-4 py-2 text-center">G</th>
                   <th className="px-4 py-2 text-center">E</th>
                   <th className="px-4 py-2 text-center">P</th>
@@ -310,9 +312,19 @@ export default function Stats() {
                     <td className="px-4 py-3 text-white font-medium">{m.username}</td>
                     <td className="px-4 py-3 text-gray-400">{m.team_name || '—'}</td>
                     <td className="px-4 py-3 text-center">
-                      {m.tournaments_won > 0
-                        ? <span className="text-yellow-400 font-bold">{m.tournaments_won}</span>
-                        : <span className="text-gray-600">—</span>}
+                      {(m.leagues_won ?? 0) > 0
+                        ? <span className="text-yellow-400 font-bold">{m.leagues_won}</span>
+                        : <span className="text-gray-700">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {(m.cups_won ?? 0) > 0
+                        ? <span className="text-orange-400 font-bold">{m.cups_won}</span>
+                        : <span className="text-gray-700">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {(m.supercopas_won ?? 0) > 0
+                        ? <span className="text-purple-400 font-bold">{m.supercopas_won}</span>
+                        : <span className="text-gray-700">—</span>}
                     </td>
                     <td className="px-4 py-3 text-center text-green-400 font-medium">{m.wins ?? 0}</td>
                     <td className="px-4 py-3 text-center text-gray-400">{m.draws ?? 0}</td>

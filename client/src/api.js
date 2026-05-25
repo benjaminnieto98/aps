@@ -43,6 +43,9 @@ export const exportOptionFile = () => api.get('/users/export-of')
 export const getTournaments = () => api.get('/tournaments')
 export const createTournament = (data) => api.post('/tournaments', data)
 export const finishTournament = (id) => api.post(`/tournaments/${id}/finish`)
+export const advanceRound = (id) => api.post(`/tournaments/${id}/advance-round`)
+export const advanceCopa = (id) => api.post(`/tournaments/${id}/advance-copa`)
+export const advanceSupercopa = (id) => api.post(`/tournaments/${id}/advance-supercopa`)
 
 // Matches
 export const getMatches = (tournamentId) => api.get(`/matches?tournament=${tournamentId}`)

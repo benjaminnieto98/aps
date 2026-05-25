@@ -25,7 +25,12 @@ function calcPrice(player, cfg) {
   const lowMult   = parseFloat(cfg.low_rating_mult  || '0.5');
   const ratingMult    = player.rating < threshold ? lowMult : 1.0;
   const purchaseBoost = Math.pow(1.1, player.purchase_count || 0);
-  return Math.round(player.rating * player.rating * base * posMult * ratingMult * purchaseBoost);
+  let price = Math.round(player.rating * player.rating * base * posMult * ratingMult * purchaseBoost);
+  // Released players (previously owned, now free) get a 30% discount
+  if (!player.owner_id && (player.purchase_count || 0) > 0) {
+    price = Math.round(price * 0.7);
+  }
+  return price;
 }
 
 // Fetches config once then calls calcPrice

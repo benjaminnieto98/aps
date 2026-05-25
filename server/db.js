@@ -37,6 +37,15 @@ async function initDb() {
     ALTER TABLE players ADD COLUMN IF NOT EXISTS purchase_count INTEGER DEFAULT 0;
 
     ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS legs INTEGER DEFAULT 1;
+    ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS tournament_type TEXT DEFAULT 'league';
+    ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS current_phase TEXT DEFAULT NULL;
+    ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS legs_copa INTEGER DEFAULT 1;
+    ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS liga_winner_id INTEGER;
+    ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS copa_winner_id INTEGER;
+    ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS supercopa_winner_id INTEGER;
+
+    ALTER TABLE matches ADD COLUMN IF NOT EXISTS phase TEXT DEFAULT NULL;
+    ALTER TABLE matches ADD COLUMN IF NOT EXISTS bracket_slot INTEGER DEFAULT NULL;
 
     ALTER TABLE clause_offers ADD COLUMN IF NOT EXISTS offer_type TEXT DEFAULT 'clause';
 

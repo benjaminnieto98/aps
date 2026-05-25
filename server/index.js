@@ -98,19 +98,17 @@ app.get('/api/stats/managers', async (req, res) => {
       WHERE home_score IS NOT NULL AND away_score IS NOT NULL
     `);
 
-    // Finished tournaments — winner is first in standings (most pts/gd/gf)
+    // Finished tournaments — read winner IDs directly
     const { rows: finishedT } = await pool.query(`
-      SELECT id, participant_ids FROM tournaments WHERE status = 'finished'
-    `);
-    const { rows: allMatchRows } = await pool.query(`
-      SELECT tournament_id, home_id, away_id, home_score, away_score
-      FROM matches WHERE home_score IS NOT NULL AND away_score IS NOT NULL
+      SELECT id, tournament_type, participant_ids,
+             liga_winner_id, copa_winner_id, supercopa_winner_id
+      FROM tournaments WHERE status = 'finished'
     `);
 
     // Compute stats per user
     const stats = {};
     for (const u of users) {
-      stats[u.id] = { ...u, wins: 0, draws: 0, losses: 0, tournaments_won: 0 };
+      stats[u.id] = { ...u, wins: 0, draws: 0, losses: 0, leagues_won: 0, cups_won: 0, supercopas_won: 0 };
     }
 
     for (const m of matchRows) {
@@ -123,28 +121,52 @@ app.get('/api/stats/managers', async (req, res) => {
       }
     }
 
-    // Determine winner of each finished tournament
+    // Count championships per type
     for (const t of finishedT) {
-      const ids = JSON.parse(t.participant_ids || '[]');
-      const tMatches = allMatchRows.filter(m => m.tournament_id === t.id);
-      const s = {};
-      for (const id of ids) s[id] = { pts: 0, gd: 0, gf: 0 };
-      for (const m of tMatches) {
-        const hh = s[m.home_id], aa = s[m.away_id];
-        if (!hh || !aa) continue;
-        hh.gf += m.home_score; hh.gd += m.home_score - m.away_score;
-        aa.gf += m.away_score; aa.gd += m.away_score - m.home_score;
-        if (m.home_score > m.away_score)      { hh.pts += 3; }
-        else if (m.home_score < m.away_score) { aa.pts += 3; }
-        else                                  { hh.pts++;  aa.pts++; }
+      const type = t.tournament_type || 'league';
+
+      if (type === 'league' || type === 'friendly') {
+        // Legacy tournaments without stored winner: compute from standings
+        if (!t.liga_winner_id) {
+          const { rows: allMatchRows } = await pool.query(
+            `SELECT home_id, away_id, home_score, away_score FROM matches
+             WHERE tournament_id = $1 AND home_score IS NOT NULL AND away_score IS NOT NULL`,
+            [t.id]
+          );
+          const ids = JSON.parse(t.participant_ids || '[]');
+          const s = {};
+          for (const id of ids) s[id] = { pts: 0, gd: 0, gf: 0 };
+          for (const m of allMatchRows) {
+            const hh = s[m.home_id], aa = s[m.away_id];
+            if (!hh || !aa) continue;
+            hh.gf += m.home_score; hh.gd += m.home_score - m.away_score;
+            aa.gf += m.away_score; aa.gd += m.away_score - m.home_score;
+            if (m.home_score > m.away_score) hh.pts += 3;
+            else if (m.home_score < m.away_score) aa.pts += 3;
+            else { hh.pts++; aa.pts++; }
+          }
+          const sorted = Object.entries(s).sort(([,a],[,b]) => b.pts-a.pts || b.gd-a.gd || b.gf-a.gf);
+          if (sorted.length > 0) {
+            const wid = parseInt(sorted[0][0], 10);
+            if (stats[wid]) stats[wid].leagues_won++;
+          }
+        } else if (stats[t.liga_winner_id]) {
+          stats[t.liga_winner_id].leagues_won++;
+        }
+
+      } else if (type === 'cup') {
+        if (t.copa_winner_id && stats[t.copa_winner_id]) stats[t.copa_winner_id].cups_won++;
+
+      } else if (type === 'superliga') {
+        if (t.liga_winner_id   && stats[t.liga_winner_id])   stats[t.liga_winner_id].leagues_won++;
+        if (t.copa_winner_id   && stats[t.copa_winner_id])   stats[t.copa_winner_id].cups_won++;
+        if (t.supercopa_winner_id && stats[t.supercopa_winner_id]) stats[t.supercopa_winner_id].supercopas_won++;
       }
-      const sorted = Object.entries(s).sort(([,a],[,b]) =>
-        b.pts - a.pts || b.gd - a.gd || b.gf - a.gf
-      );
-      if (sorted.length > 0) {
-        const winnerId = parseInt(sorted[0][0], 10);
-        if (stats[winnerId]) stats[winnerId].tournaments_won++;
-      }
+    }
+
+    // total for sorting
+    for (const s of Object.values(stats)) {
+      s.tournaments_won = s.leagues_won + s.cups_won + s.supercopas_won;
     }
 
     const result = Object.values(stats).sort((a, b) =>

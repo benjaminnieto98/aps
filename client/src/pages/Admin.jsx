@@ -4,6 +4,7 @@ import {
   setPes6Index, exportOptionFile,
   getAllPlayers, editPlayer, addPlayer,
   getTournaments, createTournament, finishTournament,
+  advanceRound, advanceCopa, advanceSupercopa,
   getConfig, updateConfig
 } from '../api'
 import { formatMoney } from '../utils/format'
@@ -453,26 +454,55 @@ function PlayersTab() {
 }
 
 // ─── TOURNAMENTS TAB ──────────────────────────────────────────────────────────
+
+const TOURNAMENT_TYPES = [
+  { id: 'league',    label: 'Liga',       icon: '🏆', desc: 'Todos contra todos' },
+  { id: 'cup',       label: 'Copa',       icon: '🥇', desc: 'Eliminación directa' },
+  { id: 'superliga', label: 'Superliga',  icon: '⭐', desc: 'Liga + Copa + Supercopa' },
+  { id: 'friendly',  label: 'Amistoso',   icon: '⚽', desc: 'Partido único' },
+]
+
+const TYPE_LABELS = { league: '🏆 Liga', cup: '🥇 Copa', superliga: '⭐ Superliga', friendly: '⚽ Amistoso' }
+
+const PRIZE_LABELS = {
+  league:    ['🥇 1°', '🥈 2°', '🥉 3°'],
+  cup:       ['🥇 Campeón', '🥈 Subcampeón'],
+  superliga: ['⭐ Supercopa', '🏆 Campeón Liga', '🥇 Campeón Copa'],
+  friendly:  [],
+}
+
+function Toggle({ on, onToggle, label, sub }) {
+  return (
+    <label className="flex items-center gap-3 cursor-pointer w-fit" onClick={onToggle}>
+      <div className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 ${on ? 'bg-green-500' : 'bg-gray-600'}`}>
+        <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-5' : 'translate-x-0'}`} />
+      </div>
+      <span className="text-white text-sm">{label}</span>
+      {sub && <span className="text-gray-500 text-xs">{sub}</span>}
+    </label>
+  )
+}
+
 function TournamentsTab() {
   const [tournaments, setTournaments] = useState([])
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ name: '', participantIds: [], prizes: ['', '', ''], legs: 1 })
+  const [form, setForm] = useState({
+    name: '', type: 'league', participantIds: [],
+    prizes: ['', '', ''], legs: 1, legs_copa: 1
+  })
   const [msg, setMsg] = useState('')
-  const [finishing, setFinishing] = useState(null)
+  const [acting, setActing] = useState(null)
 
   const fetchAll = () => {
     Promise.all([getTournaments(), getUsers()])
-      .then(([t, u]) => {
-        setTournaments(t.data)
-        setUsers(u.data)
-      })
+      .then(([t, u]) => { setTournaments(t.data); setUsers(u.data) })
       .catch(console.error)
       .finally(() => setLoading(false))
   }
   useEffect(() => { fetchAll() }, [])
 
-  const flash = (text) => { setMsg(text); setTimeout(() => setMsg(''), 3000) }
+  const flash = (text) => { setMsg(text); setTimeout(() => setMsg(''), 4000) }
 
   const toggleParticipant = (id) => {
     setForm(prev => ({
@@ -484,36 +514,30 @@ function TournamentsTab() {
   }
 
   const handleCreate = async () => {
-    if (!form.name || form.participantIds.length < 2) {
-      return flash('Nombre y al menos 2 participantes requeridos')
-    }
+    const { name, type, participantIds, prizes, legs, legs_copa } = form
+    if (!name) return flash('Ingresá un nombre')
+    if (type === 'friendly' && participantIds.length !== 2) return flash('El amistoso requiere exactamente 2 participantes')
+    if (type !== 'friendly' && participantIds.length < 2) return flash('Seleccioná al menos 2 participantes')
     try {
-      const prizes = form.prizes.map(p => parseInt(p) || 0)
-      await createTournament({ name: form.name, participantIds: form.participantIds, prizes, legs: form.legs })
-      const legsLabel = form.legs === 2 ? ' · Ida y vuelta' : ''
-      flash(`Torneo "${form.name}" creado (${form.participantIds.length <= 6 ? 'todos vs todos' : 'grupos'}${legsLabel})`)
-      setForm({ name: '', participantIds: [], prizes: ['', '', ''], legs: 1 })
+      const parsedPrizes = prizes.map(p => parseInt(p) || 0)
+      await createTournament({ name, tournament_type: type, participantIds, prizes: parsedPrizes, legs, legs_copa })
+      flash(`"${name}" creado`)
+      setForm({ name: '', type: 'league', participantIds: [], prizes: ['', '', ''], legs: 1, legs_copa: 1 })
       fetchAll()
-    } catch (err) { flash(err.response?.data?.error || 'Error') }
+    } catch (err) { flash(err.response?.data?.error || 'Error al crear') }
   }
 
-  const handleFinish = async (id) => {
-    setFinishing(id)
-    try {
-      await finishTournament(id)
-      flash('Torneo finalizado y premios entregados')
-      fetchAll()
-    } catch (err) { flash(err.response?.data?.error || 'Error') }
-    finally { setFinishing(null) }
+  const doAction = async (fn, id, msg) => {
+    setActing(id + msg)
+    try { await fn(id); flash(msg); fetchAll() }
+    catch (err) { flash(err.response?.data?.error || 'Error') }
+    finally { setActing(null) }
   }
 
   if (loading) return <div className="text-gray-400 text-center py-12">Cargando...</div>
 
-  const autoFormat = form.participantIds.length <= 6 && form.participantIds.length >= 2
-    ? 'Todos vs Todos'
-    : form.participantIds.length > 6
-      ? 'Grupos (A y B)'
-      : '—'
+  const prizeLabels = PRIZE_LABELS[form.type] || []
+  const isLeagueType = form.type === 'league' || form.type === 'superliga'
 
   return (
     <div className="space-y-6">
@@ -522,19 +546,46 @@ function TournamentsTab() {
       {/* Create form */}
       <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 space-y-4">
         <h3 className="text-white font-semibold text-sm">Crear Torneo</h3>
+
+        {/* Type selector */}
         <div>
-          <label className="text-gray-400 text-xs block mb-1">Nombre del torneo</label>
+          <label className="text-gray-400 text-xs block mb-2">Tipo de torneo</label>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {TOURNAMENT_TYPES.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setForm(prev => ({ ...prev, type: t.id, participantIds: [], prizes: ['', '', ''] }))}
+                className={`rounded-lg border px-3 py-2.5 text-left transition-all ${
+                  form.type === t.id
+                    ? 'border-green-500 bg-green-500/10'
+                    : 'border-gray-600 bg-gray-700/50 hover:border-gray-500'
+                }`}
+              >
+                <div className="text-sm font-medium text-white">{t.icon} {t.label}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{t.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Name */}
+        <div>
+          <label className="text-gray-400 text-xs block mb-1">Nombre</label>
           <input
             type="text"
-            placeholder="Ej: Torneo Apertura 2006"
+            placeholder={form.type === 'superliga' ? 'Ej: Superliga Apertura 2026' : 'Ej: Copa Clausura 2026'}
             value={form.name}
             onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
             className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
           />
         </div>
 
+        {/* Participants */}
         <div>
-          <label className="text-gray-400 text-xs block mb-1">Participantes ({form.participantIds.length} sel.) — Formato: {autoFormat}</label>
+          <label className="text-gray-400 text-xs block mb-1">
+            Participantes ({form.participantIds.length} sel.)
+            {form.type === 'friendly' && <span className="text-yellow-400 ml-1">— elegí exactamente 2</span>}
+          </label>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {users.map(u => (
               <label key={u.id} className="flex items-center gap-2 cursor-pointer">
@@ -550,40 +601,55 @@ function TournamentsTab() {
           </div>
         </div>
 
-        <div>
-          <label className="text-gray-400 text-xs block mb-1">Premios</label>
-          <div className="flex gap-2">
-            {['🥇 1°', '🥈 2°', '🥉 3°'].map((label, i) => (
-              <div key={i} className="flex-1">
-                <label className="text-gray-500 text-xs block mb-1">{label}</label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={form.prizes[i]}
-                  onChange={e => {
-                    const prizes = [...form.prizes]
-                    prizes[i] = e.target.value
-                    setForm(prev => ({ ...prev, prizes }))
-                  }}
-                  className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-green-500"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="flex items-center gap-3 cursor-pointer w-fit">
-            <div
-              onClick={() => setForm(prev => ({ ...prev, legs: prev.legs === 2 ? 1 : 2 }))}
-              className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 ${form.legs === 2 ? 'bg-green-500' : 'bg-gray-600'}`}
-            >
-              <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${form.legs === 2 ? 'translate-x-5' : 'translate-x-0'}`} />
+        {/* Prizes */}
+        {prizeLabels.length > 0 && (
+          <div>
+            <label className="text-gray-400 text-xs block mb-1">
+              Premios
+              {form.type === 'superliga' && <span className="text-gray-500 ml-1">(Supercopa / Liga / Copa — independientes)</span>}
+            </label>
+            <div className="flex gap-2">
+              {prizeLabels.map((label, i) => (
+                <div key={i} className="flex-1">
+                  <label className="text-gray-500 text-xs block mb-1">{label}</label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={form.prizes[i] || ''}
+                    onChange={e => {
+                      const prizes = [...form.prizes]
+                      prizes[i] = e.target.value
+                      setForm(prev => ({ ...prev, prizes }))
+                    }}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-green-500"
+                  />
+                </div>
+              ))}
             </div>
-            <span className="text-white text-sm">Ida y vuelta</span>
-            <span className="text-gray-500 text-xs">{form.legs === 2 ? '(cada par juega 2 partidos)' : '(cada par juega 1 partido)'}</span>
-          </label>
-        </div>
+          </div>
+        )}
+
+        {/* Legs options */}
+        {form.type !== 'friendly' && (
+          <div className="space-y-2">
+            {isLeagueType && (
+              <Toggle
+                on={form.legs === 2}
+                onToggle={() => setForm(prev => ({ ...prev, legs: prev.legs === 2 ? 1 : 2 }))}
+                label={form.type === 'superliga' ? 'Ida y vuelta — Fase Liga' : 'Ida y vuelta'}
+                sub={form.legs === 2 ? '(2 partidos por par)' : '(1 partido por par)'}
+              />
+            )}
+            {(form.type === 'cup' || form.type === 'superliga') && (
+              <Toggle
+                on={form.legs_copa === 2}
+                onToggle={() => setForm(prev => ({ ...prev, legs_copa: prev.legs_copa === 2 ? 1 : 2 }))}
+                label={form.type === 'superliga' ? 'Ida y vuelta — Fase Copa' : 'Ida y vuelta'}
+                sub={form.legs_copa === 2 ? '(2 partidos por ronda)' : '(1 partido por ronda)'}
+              />
+            )}
+          </div>
+        )}
 
         <button
           onClick={handleCreate}
@@ -595,31 +661,81 @@ function TournamentsTab() {
 
       {/* Tournament list */}
       <div className="space-y-3">
-        {tournaments.map(t => (
-          <div key={t.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-white font-medium">{t.name}</div>
-                <div className="text-gray-500 text-xs mt-0.5">
-                  {t.participants?.length || 0} participantes ·{' '}
-                  {t.format === 'roundrobin' ? 'Todos vs Todos' : 'Grupos'}{t.legs === 2 ? ' · Ida y vuelta' : ''} ·{' '}
-                  <span className={t.status === 'active' ? 'text-green-400' : 'text-gray-400'}>
-                    {t.status === 'active' ? 'Activo' : 'Finalizado'}
-                  </span>
+        {tournaments.map(t => {
+          const type = t.tournament_type || 'league'
+          const phase = t.current_phase
+          return (
+            <div key={t.id} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-white font-medium">{t.name}</span>
+                    <span className="text-xs bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded">{TYPE_LABELS[type] || type}</span>
+                    {type === 'superliga' && phase && phase !== 'completed' && (
+                      <span className="text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded capitalize">
+                        Fase: {phase}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-gray-500 text-xs mt-0.5">
+                    {t.participants?.length || 0} participantes ·{' '}
+                    {t.legs === 2 ? 'Ida y vuelta' : 'Solo ida'}
+                    {type === 'superliga' && t.legs_copa === 2 ? ' · Copa i/v' : ''} ·{' '}
+                    <span className={t.status === 'active' ? 'text-green-400' : 'text-gray-400'}>
+                      {t.status === 'active' ? 'Activo' : 'Finalizado'}
+                    </span>
+                  </div>
                 </div>
+
+                {t.status === 'active' && (
+                  <div className="flex flex-col gap-1.5 items-end shrink-0">
+                    {/* Cup: advance round */}
+                    {type === 'cup' && (
+                      <button
+                        onClick={() => doAction(advanceRound, t.id, 'Siguiente ronda generada')}
+                        disabled={!!acting}
+                        className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        {acting === t.id + 'Siguiente ronda generada' ? '...' : 'Avanzar ronda'}
+                      </button>
+                    )}
+
+                    {/* Superliga: advance copa */}
+                    {type === 'superliga' && (phase === 'liga' || phase === 'copa') && (
+                      <button
+                        onClick={() => doAction(advanceCopa, t.id, 'Copa avanzada')}
+                        disabled={!!acting}
+                        className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        {acting === t.id + 'Copa avanzada' ? '...' : phase === 'copa' ? 'Generar Final Copa' : 'Avanzar a Copa'}
+                      </button>
+                    )}
+
+                    {/* Superliga: advance supercopa */}
+                    {type === 'superliga' && (phase === 'copa' || phase === 'supercopa') && (
+                      <button
+                        onClick={() => doAction(advanceSupercopa, t.id, 'Supercopa avanzada')}
+                        disabled={!!acting}
+                        className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        {acting === t.id + 'Supercopa avanzada' ? '...' : phase === 'supercopa' ? 'Generar Final Supercopa' : 'Avanzar a Supercopa'}
+                      </button>
+                    )}
+
+                    {/* Finish */}
+                    <button
+                      onClick={() => doAction(finishTournament, t.id, 'Torneo finalizado y premios entregados')}
+                      disabled={!!acting}
+                      className="bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      {acting === t.id + 'Torneo finalizado y premios entregados' ? 'Finalizando...' : 'Finalizar'}
+                    </button>
+                  </div>
+                )}
               </div>
-              {t.status === 'active' && (
-                <button
-                  onClick={() => handleFinish(t.id)}
-                  disabled={finishing === t.id}
-                  className="bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  {finishing === t.id ? 'Finalizando...' : 'Finalizar'}
-                </button>
-              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

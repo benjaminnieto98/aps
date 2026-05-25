@@ -45,7 +45,8 @@
       "Bash(npm run *)",
       "Bash(dir /s /b \"C:\\\\Users\\\\benja\\\\KONAMI-WIN32PES6OPT\")",
       "Bash(dir /s /b \"C:\\\\Users\\\\benja\\\\Documents\\\\*PES*\")",
-      "Bash(dir /s /b \"C:\\\\Users\\\\benja\\\\AppData\\\\Local\\\\KONAMI*\")"
+      "Bash(dir /s /b \"C:\\\\Users\\\\benja\\\\AppData\\\\Local\\\\KONAMI*\")",
+      "Bash(node -e \"require\\('./routes/tournaments'\\)\")"
     ]
   }
 }
