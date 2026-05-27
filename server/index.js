@@ -291,10 +291,6 @@ app.get('/api/stats/records', async (req, res) => {
     ]);
 
     // Win/draw/loss/clean sheet stats per user (from finished matches)
-    const { rows: allMatches } = await pool.query(
-      `SELECT home_id, away_id, home_score, away_score
-       FROM matches WHERE home_score IS NOT NULL AND away_score IS NOT NULL`
-    );
     const { rows: allUsers } = await pool.query('SELECT id, username, team_name FROM users');
 
     const matchStats = {};
@@ -306,7 +302,7 @@ app.get('/api/stats/records', async (req, res) => {
     const { rows: orderedMatches } = await pool.query(
       `SELECT home_id, away_id, home_score, away_score, played_at, id
        FROM matches WHERE home_score IS NOT NULL AND away_score IS NOT NULL
-       ORDER BY COALESCE(played_at, NOW()), id`
+       ORDER BY played_at ASC NULLS FIRST, id ASC`
     );
 
     for (const m of orderedMatches) {
