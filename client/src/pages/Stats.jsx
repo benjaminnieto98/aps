@@ -10,6 +10,8 @@ function RecordCard({ label, children, accent = 'green' }) {
     blue:   'border-blue-500/30 bg-blue-500/5',
     orange: 'border-orange-500/30 bg-orange-500/5',
     purple: 'border-purple-500/30 bg-purple-500/5',
+    red:    'border-red-500/30 bg-red-500/5',
+    cyan:   'border-cyan-500/30 bg-cyan-500/5',
   }
   return (
     <div className={`rounded-xl border p-4 ${accents[accent] || accents.green}`}>
@@ -19,21 +21,61 @@ function RecordCard({ label, children, accent = 'green' }) {
   )
 }
 
-function MiniRanking({ items, valueKey, label, accent = 'green' }) {
+function MiniRanking({ items, valueKey, label, accent = 'green', format = 'money' }) {
   if (!items || items.length === 0) return <div className="text-gray-600 text-sm italic">Sin datos</div>
   const medals = ['🥇', '🥈', '🥉']
+  const colorMap = { green: 'text-green-400', orange: 'text-orange-400', red: 'text-red-400', blue: 'text-blue-400', purple: 'text-purple-400', cyan: 'text-cyan-400' }
+  const color = colorMap[accent] || 'text-green-400'
   return (
     <div className="space-y-2">
       {items.map((item, i) => (
         <div key={item.username} className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm w-5">{medals[i] || <span className="text-gray-500 text-xs">{i + 1}</span>}</span>
-            <span className="text-white text-sm">{item.username}</span>
+            <span className="text-white text-sm">{item.team_name || item.username}</span>
           </div>
-          <span className="text-green-400 font-bold text-sm">{formatMoney(item[valueKey])}</span>
+          <span className={`${color} font-bold text-sm`}>
+            {format === 'money' ? formatMoney(item[valueKey]) : item[valueKey]}
+          </span>
         </div>
       ))}
     </div>
+  )
+}
+
+function MatchRecordCard({ label, data, accent = 'yellow' }) {
+  if (!data) return (
+    <RecordCard label={label} accent={accent}>
+      <div className="text-gray-600 italic text-sm">Sin datos</div>
+    </RecordCard>
+  )
+  const homeWon = data.home_score > data.away_score
+  const awayWon = data.away_score > data.home_score
+  return (
+    <RecordCard label={label} accent={accent}>
+      <div className="text-center">
+        {data.tournament_name && <div className="text-gray-500 text-xs mb-2">{data.tournament_name}</div>}
+        <div className="flex items-center justify-center gap-3">
+          <div className="flex-1 text-right">
+            <div className={`font-bold text-sm truncate ${homeWon ? 'text-white' : 'text-gray-400'}`}>{data.home_team || data.home_username}</div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className={`text-2xl font-black ${homeWon ? 'text-green-400' : 'text-gray-300'}`}>{data.home_score}</span>
+            <span className="text-gray-600 text-sm">–</span>
+            <span className={`text-2xl font-black ${awayWon ? 'text-green-400' : 'text-gray-300'}`}>{data.away_score}</span>
+          </div>
+          <div className="flex-1 text-left">
+            <div className={`font-bold text-sm truncate ${awayWon ? 'text-white' : 'text-gray-400'}`}>{data.away_team || data.away_username}</div>
+          </div>
+        </div>
+        {data.diff !== undefined && (
+          <div className="text-gray-500 text-xs mt-1">Diferencia: {data.diff} goles</div>
+        )}
+        {data.total_goals !== undefined && (
+          <div className="text-gray-500 text-xs mt-1">Total: {data.total_goals} goles</div>
+        )}
+      </div>
+    </RecordCard>
   )
 }
 
@@ -209,8 +251,8 @@ export default function Stats() {
   const tabs = [
     { id: 'scorers',  label: 'Goleadores' },
     { id: 'managers', label: 'Managers' },
-    { id: 'records',  label: 'Tabla de Honor' },
-    { id: 'h2h',      label: 'Face a Face' },
+    { id: 'records',  label: 'Records' },
+    { id: 'h2h',      label: 'Historial' },
   ]
 
   return (
@@ -300,6 +342,7 @@ export default function Stats() {
                   <th className="px-4 py-2 text-center">G</th>
                   <th className="px-4 py-2 text-center">E</th>
                   <th className="px-4 py-2 text-center">P</th>
+                  <th className="px-4 py-2 text-right">Valor</th>
                   <th className="px-4 py-2 text-right">Presupuesto</th>
                 </tr>
               </thead>
@@ -329,6 +372,7 @@ export default function Stats() {
                     <td className="px-4 py-3 text-center text-green-400 font-medium">{m.wins ?? 0}</td>
                     <td className="px-4 py-3 text-center text-gray-400">{m.draws ?? 0}</td>
                     <td className="px-4 py-3 text-center text-red-400">{m.losses ?? 0}</td>
+                    <td className="px-4 py-3 text-right text-cyan-400 font-bold">{formatMoney(m.team_value ?? 0)}</td>
                     <td className="px-4 py-3 text-right text-green-400 font-bold">{formatMoney(m.budget)}</td>
                   </tr>
                 ))}
@@ -338,13 +382,13 @@ export default function Stats() {
         </div>
       )}
 
-      {/* Face a Face */}
+      {/* Historial */}
       {tab === 'h2h' && <H2HTab managers={managers} />}
 
-      {/* Hall of Fame */}
+      {/* Records */}
       {tab === 'records' && (
         <div className="space-y-4">
-          {/* Biggest transfer */}
+          {/* Transferencia más cara */}
           {records?.biggestTransfer ? (
             <RecordCard label="Transferencia más cara" accent="yellow">
               <div className="flex items-center justify-between">
@@ -372,7 +416,29 @@ export default function Stats() {
             </RecordCard>
           )}
 
-          {/* Most transferred player */}
+          {/* Goleadas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <MatchRecordCard label="Mayor goleada" data={records?.biggestWin} accent="orange" />
+            <MatchRecordCard label="Partido más goleador" data={records?.mostGoalsMatch} accent="blue" />
+          </div>
+
+          {/* Racha ganadora */}
+          {records?.longestStreak && (
+            <RecordCard label="Racha ganadora más larga" accent="green">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-white font-bold text-lg">{records.longestStreak.team_name || records.longestStreak.username}</div>
+                  <div className="text-gray-500 text-xs">{records.longestStreak.username}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-green-400 font-black text-3xl">{records.longestStreak.longest_win_streak}</div>
+                  <div className="text-gray-500 text-xs">victorias seguidas</div>
+                </div>
+              </div>
+            </RecordCard>
+          )}
+
+          {/* Jugador más transferido */}
           {records?.mostTransferred && (
             <RecordCard label="Jugador más traspasado" accent="blue">
               <div className="flex items-center justify-between">
@@ -393,12 +459,29 @@ export default function Stats() {
             </RecordCard>
           )}
 
+          {/* Rankings W/D/L + clean sheets */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <RecordCard label="Más victorias" accent="green">
+              <MiniRanking items={records?.mostWins} valueKey="wins" accent="green" format="number" />
+            </RecordCard>
+            <RecordCard label="Más derrotas" accent="red">
+              <MiniRanking items={records?.mostLosses} valueKey="losses" accent="red" format="number" />
+            </RecordCard>
+            <RecordCard label="Rey del empate" accent="cyan">
+              <MiniRanking items={records?.mostDraws} valueKey="draws" accent="cyan" format="number" />
+            </RecordCard>
+            <RecordCard label="Portería menos batida" accent="purple">
+              <MiniRanking items={records?.cleanSheets} valueKey="clean_sheets" accent="purple" format="number" />
+            </RecordCard>
+          </div>
+
+          {/* Transferencias */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <RecordCard label="Top gastadores" accent="orange">
-              <MiniRanking items={records?.topSpenders} valueKey="total" />
+              <MiniRanking items={records?.topSpenders} valueKey="total" accent="orange" />
             </RecordCard>
             <RecordCard label="Top recaudadores" accent="green">
-              <MiniRanking items={records?.topEarners} valueKey="total" />
+              <MiniRanking items={records?.topEarners} valueKey="total" accent="green" />
             </RecordCard>
           </div>
 

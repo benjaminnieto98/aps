@@ -299,7 +299,7 @@ router.post('/:id/advance-round', authenticate, async (req, res) => {
     const finalPairs = [[finalists[0], finalists[1]]];
 
     await withTransaction(async (client) => {
-      await insertKnockoutPairs(client, tId, finalPairs, legs, 'Final', 'final', 0);
+      await insertKnockoutPairs(client, tId, finalPairs, 1, 'Final', 'final', 0);
     });
     res.json({ success: true, message: 'Final generada', phase: 'final' });
 
@@ -344,7 +344,7 @@ router.post('/:id/advance-copa', authenticate, async (req, res) => {
       });
 
       await withTransaction(async (client) => {
-        await insertKnockoutPairs(client, tId, [[finalists[0], finalists[1]]], legsCopa, 'Copa – Final', 'copa_final', 0);
+        await insertKnockoutPairs(client, tId, [[finalists[0], finalists[1]]], 1, 'Copa – Final', 'copa_final', 0);
       });
       return res.json({ success: true, message: 'Final de Copa generada', phase: 'copa_final' });
     }

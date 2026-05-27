@@ -82,6 +82,25 @@ app.get('/api/stats/scorers', async (req, res) => {
   }
 });
 
+// Inline price calculation for stats (mirrors players.js calcPrice)
+const POSITION_GROUP_STATS = {
+  GK: 'gk', CB: 'def', LB: 'def',
+  CDM: 'mid', CM: 'mid', CAM: 'mid',
+  LW: 'fwd', ST: 'fwd'
+};
+function calcPriceStats(player, cfg) {
+  const base      = parseInt(cfg.price_multiplier  || '1000', 10);
+  const group     = POSITION_GROUP_STATS[player.position] || 'mid';
+  const posMult   = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
+  const threshold = parseInt(cfg.rating_threshold   || '80',  10);
+  const lowMult   = parseFloat(cfg.low_rating_mult  || '0.5');
+  const ratingMult    = player.rating < threshold ? lowMult : 1.0;
+  const purchaseBoost = Math.pow(1.1, player.purchase_count || 0);
+  let price = Math.round(player.rating * player.rating * base * posMult * ratingMult * purchaseBoost);
+  if (!player.owner_id && (player.purchase_count || 0) > 0) price = Math.round(price * 0.7);
+  return price;
+}
+
 app.get('/api/stats/managers', async (req, res) => {
   try {
     // Base user + player count
@@ -169,6 +188,22 @@ app.get('/api/stats/managers', async (req, res) => {
       s.tournaments_won = s.leagues_won + s.cups_won + s.supercopas_won;
     }
 
+    // Compute team value (sum of dynamic prices of each user's players)
+    const { rows: cfgRows } = await pool.query(
+      `SELECT key, value FROM config WHERE key IN ('price_multiplier','pos_mult_gk','pos_mult_def','pos_mult_mid','pos_mult_fwd','rating_threshold','low_rating_mult')`
+    );
+    const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]));
+
+    const { rows: allPlayers } = await pool.query(
+      'SELECT id, rating, position, owner_id, purchase_count FROM players WHERE owner_id IS NOT NULL'
+    );
+    for (const s of Object.values(stats)) s.team_value = 0;
+    for (const p of allPlayers) {
+      if (stats[p.owner_id]) {
+        stats[p.owner_id].team_value += calcPriceStats(p, cfg);
+      }
+    }
+
     const result = Object.values(stats).sort((a, b) =>
       b.tournaments_won - a.tournaments_won ||
       b.wins - a.wins ||
@@ -184,40 +219,141 @@ app.get('/api/stats/managers', async (req, res) => {
 
 app.get('/api/stats/records', async (req, res) => {
   try {
-    const [biggestTransfer, topSpenders, topEarners, mostTransferred, mostActive] = await Promise.all([
+    const [
+      biggestTransfer, topSpenders, topEarners, mostTransferred, mostActive,
+      biggestWin, mostGoalsMatch
+    ] = await Promise.all([
+      // Traspaso más caro
       pool.query(
         `SELECT player_name, player_position, player_rating, price, from_username, to_username, created_at
          FROM transfers WHERE type = 'compra' AND price IS NOT NULL ORDER BY price DESC LIMIT 1`
       ).then(r => r.rows[0] || null),
 
+      // Top gastadores
       pool.query(
         `SELECT to_username as username, SUM(price)::int as total FROM transfers
          WHERE type='compra' AND price IS NOT NULL AND to_username IS NOT NULL
          GROUP BY to_username ORDER BY total DESC LIMIT 5`
       ).then(r => r.rows),
 
+      // Top vendedores
       pool.query(
         `SELECT from_username as username, SUM(price)::int as total FROM transfers
          WHERE type='compra' AND price IS NOT NULL AND from_username IS NOT NULL
          GROUP BY from_username ORDER BY total DESC LIMIT 5`
       ).then(r => r.rows),
 
+      // Jugador más transferido
       pool.query(
         `SELECT player_name, player_position, player_rating, COUNT(*)::int as times
          FROM transfers WHERE type='compra'
          GROUP BY player_id, player_name, player_position, player_rating ORDER BY times DESC LIMIT 1`
       ).then(r => r.rows[0] || null),
 
+      // Más activo en el mercado
       pool.query(
         `SELECT username, COUNT(*)::int as ops FROM (
            SELECT to_username as username FROM transfers WHERE type='compra' AND to_username IS NOT NULL
            UNION ALL
            SELECT from_username FROM transfers WHERE type='compra' AND from_username IS NOT NULL
          ) t GROUP BY username ORDER BY ops DESC LIMIT 5`
-      ).then(r => r.rows)
+      ).then(r => r.rows),
+
+      // Mayor goleada (mayor diferencia de goles)
+      pool.query(
+        `SELECT m.id, m.home_score, m.away_score,
+                ABS(m.home_score - m.away_score) as diff,
+                uh.username as home_username, uh.team_name as home_team,
+                ua.username as away_username, ua.team_name as away_team,
+                t.name as tournament_name
+         FROM matches m
+         JOIN users uh ON m.home_id = uh.id
+         JOIN users ua ON m.away_id = ua.id
+         LEFT JOIN tournaments t ON m.tournament_id = t.id
+         WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+         ORDER BY diff DESC, (m.home_score + m.away_score) DESC LIMIT 1`
+      ).then(r => r.rows[0] || null),
+
+      // Partido más goleador (más goles en total)
+      pool.query(
+        `SELECT m.id, m.home_score, m.away_score,
+                (m.home_score + m.away_score) as total_goals,
+                uh.username as home_username, uh.team_name as home_team,
+                ua.username as away_username, ua.team_name as away_team,
+                t.name as tournament_name
+         FROM matches m
+         JOIN users uh ON m.home_id = uh.id
+         JOIN users ua ON m.away_id = ua.id
+         LEFT JOIN tournaments t ON m.tournament_id = t.id
+         WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+         ORDER BY total_goals DESC LIMIT 1`
+      ).then(r => r.rows[0] || null),
     ]);
 
-    res.json({ biggestTransfer, topSpenders, topEarners, mostTransferred, mostActive });
+    // Win/draw/loss/clean sheet stats per user (from finished matches)
+    const { rows: allMatches } = await pool.query(
+      `SELECT home_id, away_id, home_score, away_score
+       FROM matches WHERE home_score IS NOT NULL AND away_score IS NOT NULL`
+    );
+    const { rows: allUsers } = await pool.query('SELECT id, username, team_name FROM users');
+
+    const matchStats = {};
+    for (const u of allUsers) {
+      matchStats[u.id] = { ...u, wins: 0, losses: 0, draws: 0, clean_sheets: 0, gf: 0, ga: 0, streak_wins: 0, streak_draws: 0 };
+    }
+
+    // We need ordered matches to compute current streaks
+    const { rows: orderedMatches } = await pool.query(
+      `SELECT home_id, away_id, home_score, away_score, played_at, id
+       FROM matches WHERE home_score IS NOT NULL AND away_score IS NOT NULL
+       ORDER BY COALESCE(played_at, NOW()), id`
+    );
+
+    for (const m of orderedMatches) {
+      const h = matchStats[m.home_id], a = matchStats[m.away_id];
+      if (!h || !a) continue;
+      h.gf += m.home_score; h.ga += m.away_score;
+      a.gf += m.away_score; a.ga += m.home_score;
+      if (m.away_score === 0) h.clean_sheets++;
+      if (m.home_score === 0) a.clean_sheets++;
+      if (m.home_score > m.away_score) { h.wins++; a.losses++; }
+      else if (m.home_score < m.away_score) { a.wins++; h.losses++; }
+      else { h.draws++; a.draws++; }
+    }
+
+    // Longest win streak per user (iterate matches in order)
+    const userStreaks = {};
+    for (const uid of Object.keys(matchStats)) {
+      userStreaks[uid] = { cur: 0, max: 0 };
+    }
+    for (const m of orderedMatches) {
+      const processUser = (uid, won) => {
+        if (!userStreaks[uid]) return;
+        if (won) { userStreaks[uid].cur++; userStreaks[uid].max = Math.max(userStreaks[uid].max, userStreaks[uid].cur); }
+        else userStreaks[uid].cur = 0;
+      };
+      const homeWon = m.home_score > m.away_score;
+      const awayWon = m.away_score > m.home_score;
+      processUser(m.home_id, homeWon);
+      processUser(m.away_id, awayWon);
+    }
+    for (const uid of Object.keys(matchStats)) {
+      matchStats[uid].longest_win_streak = userStreaks[uid]?.max || 0;
+    }
+
+    const userList = Object.values(matchStats).filter(u => u.wins + u.draws + u.losses > 0);
+
+    const mostWins    = [...userList].sort((a,b) => b.wins - a.wins).slice(0,5);
+    const mostLosses  = [...userList].sort((a,b) => b.losses - a.losses).slice(0,5);
+    const mostDraws   = [...userList].sort((a,b) => b.draws - a.draws).slice(0,5);
+    const cleanSheets = [...userList].sort((a,b) => b.clean_sheets - a.clean_sheets).slice(0,5);
+    const longestStreak = [...userList].sort((a,b) => b.longest_win_streak - a.longest_win_streak).slice(0,1)[0] || null;
+
+    res.json({
+      biggestTransfer, topSpenders, topEarners, mostTransferred, mostActive,
+      biggestWin, mostGoalsMatch,
+      mostWins, mostLosses, mostDraws, cleanSheets, longestStreak
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });

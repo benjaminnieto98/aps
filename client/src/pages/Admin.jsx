@@ -16,6 +16,7 @@ function UsersTab() {
   const [editBudget, setEditBudget] = useState({})
   const [editTeam, setEditTeam] = useState({})
   const [editPes6, setEditPes6] = useState({})
+  const [showAssign, setShowAssign] = useState({})   // tracks which rows show the assign-team input
   const [msg, setMsg] = useState('')
 
   const fetchUsers = () => {
@@ -33,6 +34,7 @@ function UsersTab() {
       flash(`Equipo asignado (${res.data.playersAssigned} jugadores)`)
       fetchUsers()
       setEditTeam(prev => ({ ...prev, [id]: '' }))
+      setShowAssign(prev => ({ ...prev, [id]: false }))
     } catch (err) { flash(err.response?.data?.error || 'Error') }
   }
 
@@ -124,9 +126,9 @@ function UsersTab() {
               <th className="px-3 py-2 text-right">Presupuesto</th>
               <th className="px-3 py-2 text-center">Jugadores</th>
               <th className="px-3 py-2 text-center">Admin</th>
-              <th className="px-3 py-2 text-left">Asignar Equipo</th>
               <th className="px-3 py-2 text-left">+/− Presupuesto</th>
               <th className="px-3 py-2 text-center">PES6 idx</th>
+              <th className="px-3 py-2 text-left">Asignar Equipo</th>
               <th className="px-3 py-2 text-center">Acciones</th>
             </tr>
           </thead>
@@ -148,24 +150,6 @@ function UsersTab() {
                   >
                     {u.is_admin ? 'Sí' : 'No'}
                   </button>
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex gap-1">
-                    <input
-                      type="text"
-                      placeholder="Nombre equipo"
-                      value={editTeam[u.id] || ''}
-                      onChange={e => setEditTeam(prev => ({ ...prev, [u.id]: e.target.value }))}
-                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs w-36 focus:outline-none focus:border-green-500"
-                      onKeyDown={e => e.key === 'Enter' && handleAssignTeam(u.id)}
-                    />
-                    <button
-                      onClick={() => handleAssignTeam(u.id)}
-                      className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-1 rounded transition-colors"
-                    >
-                      OK
-                    </button>
-                  </div>
                 </td>
                 <td className="px-3 py-2.5">
                   <div className="flex gap-1 items-center">
@@ -202,6 +186,43 @@ function UsersTab() {
                       OK
                     </button>
                   </div>
+                </td>
+                <td className="px-3 py-2.5">
+                  {showAssign[u.id] ? (
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        placeholder="Nombre equipo"
+                        value={editTeam[u.id] || ''}
+                        onChange={e => setEditTeam(prev => ({ ...prev, [u.id]: e.target.value }))}
+                        className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-xs w-32 focus:outline-none focus:border-green-500"
+                        onKeyDown={e => e.key === 'Enter' && handleAssignTeam(u.id)}
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleAssignTeam(u.id)}
+                        className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-1 rounded transition-colors"
+                      >
+                        OK
+                      </button>
+                      <button
+                        onClick={() => setShowAssign(prev => ({ ...prev, [u.id]: false }))}
+                        className="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 text-xs truncate max-w-[100px]">{u.team_name || '—'}</span>
+                      <button
+                        onClick={() => setShowAssign(prev => ({ ...prev, [u.id]: true }))}
+                        className="bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded transition-colors shrink-0"
+                      >
+                        Cambiar
+                      </button>
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-2.5">
                   <div className="flex gap-1">

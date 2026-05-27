@@ -182,15 +182,27 @@ router.post('/:id/list', authenticate, async (req, res) => {
     if (player.owner_id !== req.user.id) return res.status(403).json({ error: 'No es tu jugador' });
 
     const { rows: cfgRows } = await pool.query(
-      "SELECT value FROM config WHERE key = 'min_roster'"
+      `SELECT key, value FROM config WHERE key IN (${PRICE_CONFIG_KEYS},'min_roster')`
     );
-    const minRoster = cfgRows[0] ? parseInt(cfgRows[0].value, 10) : 18;
+    const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]));
+    const minRoster = cfg.min_roster ? parseInt(cfg.min_roster, 10) : 18;
+
     const { rows: cntRows } = await pool.query(
       'SELECT COUNT(*)::int as cnt FROM players WHERE owner_id = $1', [req.user.id]
     );
     if (cntRows[0].cnt <= minRoster) {
       return res.status(400).json({
         error: `No podés poner jugadores en venta con ${minRoster} o menos jugadores en el plantel (mínimo: ${minRoster})`
+      });
+    }
+
+    // Validate price doesn't exceed clause value (use base price as effective clause if none set)
+    const basePrice = calcPrice(player, cfg);
+    const effectiveClause = player.release_clause ?? basePrice;
+    const listedPrice = parseInt(price, 10);
+    if (listedPrice > effectiveClause) {
+      return res.status(400).json({
+        error: `El precio no puede superar el valor de la cláusula (${effectiveClause.toLocaleString('es-AR')} M)`
       });
     }
 
