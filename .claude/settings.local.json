@@ -52,7 +52,9 @@
       "Bash(node --check C:\\\\Users\\\\benja\\\\APS\\\\server\\\\routes\\\\tournaments.js)",
       "Bash(node --check server/index.js)",
       "Bash(node --check server/routes/players.js)",
-      "Bash(node --check server/routes/tournaments.js)"
+      "Bash(node --check server/routes/tournaments.js)",
+      "Bash(node --check server/routes/clause-offers.js)",
+      "Bash(node --check server/db.js)"
     ]
   }
 }

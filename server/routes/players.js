@@ -18,14 +18,20 @@ const PRICE_CONFIG_KEYS =
 
 // Pure price calculation — pass a cfg object already fetched from DB
 function calcPrice(player, cfg) {
-  const base      = parseInt(cfg.price_multiplier  || '1000', 10);
-  const group     = POSITION_GROUP[player.position] || 'mid';
-  const posMult   = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
-  const threshold = parseInt(cfg.rating_threshold   || '80',  10);
-  const lowMult   = parseFloat(cfg.low_rating_mult  || '0.5');
-  const ratingMult    = player.rating < threshold ? lowMult : 1.0;
-  const purchaseBoost = Math.pow(1.1, player.purchase_count || 0);
-  let price = Math.round(player.rating * player.rating * base * posMult * ratingMult * purchaseBoost);
+  let price;
+  if (player.price_override != null) {
+    // Use the stored market anchor (set after each real transaction)
+    price = player.price_override;
+  } else {
+    const base      = parseInt(cfg.price_multiplier  || '1000', 10);
+    const group     = POSITION_GROUP[player.position] || 'mid';
+    const posMult   = parseFloat(cfg[`pos_mult_${group}`] || '1.0');
+    const threshold = parseInt(cfg.rating_threshold   || '80',  10);
+    const lowMult   = parseFloat(cfg.low_rating_mult  || '0.5');
+    const ratingMult    = player.rating < threshold ? lowMult : 1.0;
+    const purchaseBoost = Math.pow(1.1, player.purchase_count || 0);
+    price = Math.round(player.rating * player.rating * base * posMult * ratingMult * purchaseBoost);
+  }
   // Released players (previously owned, now free) get a 30% discount
   if (!player.owner_id && (player.purchase_count || 0) > 0) {
     price = Math.round(price * 0.7);
@@ -512,14 +518,16 @@ router.post('/:id/buy', authenticate, async (req, res) => {
       ? (await pool.query('SELECT id, username FROM users WHERE id = $1', [player.owner_id])).rows[0]
       : null;
 
+    const nextOverride = Math.round(price * 1.1);
+
     await withTransaction(async (client) => {
       await client.query('UPDATE users SET budget = budget - $1 WHERE id = $2', [price, req.user.id]);
       if (player.owner_id !== null) {
         await client.query('UPDATE users SET budget = budget + $1 WHERE id = $2', [price, player.owner_id]);
       }
       await client.query(
-        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1 WHERE id = $2',
-        [req.user.id, playerId]
+        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1, price_override = $3 WHERE id = $2',
+        [req.user.id, playerId, nextOverride]
       );
       await logTransfer({ type: 'compra', player, from: sellerUser, to: buyerUser, price, _client: client });
     });

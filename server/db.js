@@ -49,6 +49,8 @@ async function initDb() {
 
     ALTER TABLE clause_offers ADD COLUMN IF NOT EXISTS offer_type TEXT DEFAULT 'clause';
 
+    ALTER TABLE players ADD COLUMN IF NOT EXISTS price_override INTEGER DEFAULT NULL;
+
     CREATE TABLE IF NOT EXISTS players (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,

@@ -381,10 +381,13 @@ function ReceivedOffers({ onRefresh }) {
               className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
               {isDirectOffer ? 'Aceptar oferta' : 'Aceptar transferencia'}
             </button>
-            <button onClick={() => handleReject(o.id)} disabled={loading}
-              className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
-              Rechazar
-            </button>
+            {/* Rechazar solo para ofertas directas; las cláusulas solo se rechazan subiendo el valor */}
+            {isDirectOffer && (
+              <button onClick={() => handleReject(o.id)} disabled={loading}
+                className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
+                Rechazar
+              </button>
+            )}
           </div>
         </div>
         )

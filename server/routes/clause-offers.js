@@ -83,12 +83,14 @@ router.post('/:id/accept', authenticate, async (req, res) => {
     const owner = ownerRows[0];
     const now = Date.now();
 
+    const nextOverride = Math.round(offer.clause_amount * 1.1);
+
     await withTransaction(async (client) => {
       await client.query('UPDATE users SET budget = budget - $1 WHERE id = $2', [offer.clause_amount, buyer.id]);
       await client.query('UPDATE users SET budget = budget + $1 WHERE id = $2', [offer.clause_amount, req.user.id]);
       await client.query(
-        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1 WHERE id = $2',
-        [buyer.id, offer.player_id]
+        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1, price_override = $3 WHERE id = $2',
+        [buyer.id, offer.player_id, nextOverride]
       );
       await client.query(
         "UPDATE clause_offers SET status = 'accepted', resolved_at = $1 WHERE id = $2",
@@ -239,12 +241,14 @@ router.post('/:id/accept-raised', authenticate, async (req, res) => {
     const owner = ownerRows[0];
     const now = Date.now();
 
+    const nextOverride = Math.round(offer.new_clause_amount * 1.1);
+
     await withTransaction(async (client) => {
       await client.query('UPDATE users SET budget = budget - $1 WHERE id = $2', [offer.new_clause_amount, req.user.id]);
       await client.query('UPDATE users SET budget = budget + $1 WHERE id = $2', [offer.new_clause_amount, offer.owner_id]);
       await client.query(
-        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1 WHERE id = $2',
-        [req.user.id, offer.player_id]
+        'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1, price_override = $3 WHERE id = $2',
+        [req.user.id, offer.player_id, nextOverride]
       );
       await client.query(
         "UPDATE clause_offers SET status = 'accepted', resolved_at = $1 WHERE id = $2",
