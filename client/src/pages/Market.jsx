@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { getMarketPlayers, getClausePlayers, getFreePlayers, buyPlayer, makeDirectOffer, getSentOffers, acceptRaisedOffer, cancelOffer } from '../api'
+import { getMarketPlayers, getClausePlayers, getFreePlayers, buyPlayer, makeDirectOffer, getSentOffers, acceptRaisedOffer, cancelOffer, getAllClauseOffers } from '../api'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, ratingColor } from '../utils/format'
 
@@ -53,6 +53,162 @@ function PlayerRow({ player, priceField, onBuy, isClause, onDirectOffer }) {
 }
 
 const EMPTY_FILTERS = { search: '', position: '', ovrMin: '', ovrMax: '', priceMin: '', priceMax: '' }
+
+const OFFER_STATUS_LABELS = {
+  pending:   { label: 'Pendiente',        color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
+  accepted:  { label: 'Aceptada',         color: 'text-green-400 bg-green-400/10 border-green-400/30' },
+  raised:    { label: 'Cláusula subida',  color: 'text-orange-400 bg-orange-400/10 border-orange-400/30' },
+  rejected:  { label: 'Rechazada',        color: 'text-red-400 bg-red-400/10 border-red-400/30' },
+  cancelled: { label: 'Cancelada',        color: 'text-gray-400 bg-gray-400/10 border-gray-400/30' },
+}
+
+const PAGE_SIZE_OFFERS = 30
+
+function AllOffersTab() {
+  const [offers, setOffers]       = useState([])
+  const [total,  setTotal]        = useState(0)
+  const [page,   setPage]         = useState(0)
+  const [status, setStatus]       = useState('')
+  const [loading, setLoading]     = useState(true)
+
+  const load = (s, p) => {
+    setLoading(true)
+    const params = { limit: PAGE_SIZE_OFFERS, offset: p * PAGE_SIZE_OFFERS }
+    if (s) params.status = s
+    getAllClauseOffers(params)
+      .then(r => { setOffers(r.data.offers); setTotal(r.data.total) })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load(status, page) }, [status, page])
+
+  const handleStatus = (s) => { setStatus(s); setPage(0) }
+
+  const totalPages = Math.ceil(total / PAGE_SIZE_OFFERS)
+
+  const formatDate = (ts) => {
+    if (!ts) return '—'
+    return new Date(ts).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+      + ' ' + new Date(ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const STATUS_FILTER_OPTIONS = [
+    { value: '',          label: 'Todas' },
+    { value: 'pending',   label: 'Pendientes' },
+    { value: 'raised',    label: 'Subidas' },
+    { value: 'accepted',  label: 'Aceptadas' },
+    { value: 'rejected',  label: 'Rechazadas' },
+    { value: 'cancelled', label: 'Canceladas' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {/* Status filter */}
+      <div className="flex flex-wrap gap-2">
+        {STATUS_FILTER_OPTIONS.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => handleStatus(opt.value)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              status === opt.value
+                ? 'bg-green-500 border-green-500 text-white'
+                : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+        <span className="text-gray-600 text-xs self-center ml-auto">{total} oferta{total !== 1 ? 's' : ''}</span>
+      </div>
+
+      {/* List */}
+      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+        {loading ? (
+          <div className="text-gray-400 text-center py-12">Cargando...</div>
+        ) : offers.length === 0 ? (
+          <div className="text-gray-500 text-center py-12 text-sm">No hay ofertas registradas</div>
+        ) : (
+          <div className="divide-y divide-gray-800/50">
+            {offers.map(o => {
+              const st = OFFER_STATUS_LABELS[o.status] || OFFER_STATUS_LABELS.pending
+              const isClause = o.offer_type !== 'offer'
+              const displayAmount = o.status === 'accepted' && o.new_clause_amount
+                ? o.new_clause_amount
+                : o.clause_amount
+              return (
+                <div key={o.id} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-800/30 transition-colors">
+                  {/* Player info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-white font-medium text-sm">{o.player_name}</span>
+                      <span className="text-yellow-400 text-xs font-bold">{o.player_rating}</span>
+                      <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{o.player_position}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded border ${
+                        isClause
+                          ? 'text-orange-400 border-orange-400/30 bg-orange-400/10'
+                          : 'text-blue-400 border-blue-400/30 bg-blue-400/10'
+                      }`}>
+                        {isClause ? 'Cláusula' : 'Oferta directa'}
+                      </span>
+                    </div>
+                    <div className="text-gray-500 text-xs mt-0.5 flex items-center gap-1 flex-wrap">
+                      <span className="text-gray-300">{o.buyer_username}</span>
+                      <span className="text-gray-600">→</span>
+                      <span className="text-gray-300">{o.owner_username}</span>
+                      <span className="text-gray-700">·</span>
+                      <span>{formatDate(o.created_at)}</span>
+                    </div>
+                    {/* Show raised amount if applicable */}
+                    {o.new_clause_amount && o.status !== 'accepted' && (
+                      <div className="text-orange-400 text-xs mt-0.5">
+                        Cláusula subida a {formatMoney(o.new_clause_amount)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Amount + status */}
+                  <div className="text-right shrink-0 space-y-1">
+                    <div className="text-green-400 font-bold text-sm">{formatMoney(displayAmount)}</div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border inline-block ${st.color}`}>
+                      {st.label}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-gray-500 text-sm">
+            {page * PAGE_SIZE_OFFERS + 1}–{Math.min((page + 1) * PAGE_SIZE_OFFERS, total)} de {total}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-white rounded-lg transition-colors"
+            >
+              ← Anterior
+            </button>
+            <span className="px-3 py-1.5 text-sm text-gray-400">{page + 1} / {totalPages}</span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-white rounded-lg transition-colors"
+            >
+              Siguiente →
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Market() {
   const { user, refreshUser } = useAuth()
@@ -172,10 +328,11 @@ export default function Market() {
   const pendingCount = sentOffers.filter(o => ['pending', 'raised'].includes(o.status)).length
 
   const tabs = [
-    { id: 'market',  label: 'En venta',      count: marketPlayers.length },
-    { id: 'clauses', label: 'Cláusulas',      count: clausePlayers.length },
-    { id: 'free',    label: 'Agentes Libres', count: freePlayers.length },
-    { id: 'offers',  label: 'Mis ofertas',    count: pendingCount, highlight: pendingCount > 0 },
+    { id: 'market',    label: 'En venta',      count: marketPlayers.length },
+    { id: 'clauses',   label: 'Cláusulas',      count: clausePlayers.length },
+    { id: 'free',      label: 'Agentes Libres', count: freePlayers.length },
+    { id: 'offers',    label: 'Mis ofertas',    count: pendingCount, highlight: pendingCount > 0 },
+    { id: 'alloffer',  label: 'Historial' },
   ]
 
   const priceField = tab === 'market' ? 'listed_price' : tab === 'clauses' ? 'release_clause' : 'price'
@@ -226,7 +383,7 @@ export default function Market() {
       </div>
 
       {/* Search + Filter bar */}
-      {tab !== 'offers' && (
+      {tab !== 'offers' && tab !== 'alloffer' && (
         <div className="space-y-3">
           <div className="flex gap-2">
             <input
@@ -336,14 +493,17 @@ export default function Market() {
       )}
 
       {/* Clause info banner */}
-      {isClauseTab && (
+      {isClauseTab && tab !== 'alloffer' && (
         <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg px-4 py-3 text-orange-300 text-xs">
           Al activar una cláusula se envía una oferta al dueño del jugador. Él puede aceptar la transferencia o subir la cláusula pagando la diferencia de su propio presupuesto.
         </div>
       )}
 
+      {/* Feed de ofertas (público) */}
+      {tab === 'alloffer' && <AllOffersTab />}
+
       {/* Player list */}
-      {tab !== 'offers' && (
+      {tab !== 'offers' && tab !== 'alloffer' && (
         <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
           {loading ? (
             <div className="text-gray-400 text-center py-12">Cargando...</div>

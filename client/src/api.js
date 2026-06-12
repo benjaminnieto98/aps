@@ -65,6 +65,7 @@ export const getManagers = () => api.get('/stats/managers')
 export const getTransfers = (params = {}) => api.get('/transfers', { params })
 
 // Clause offers
+export const getAllClauseOffers = (params = {}) => api.get('/clause-offers/all', { params })
 export const getReceivedOffers = () => api.get('/clause-offers/received')
 export const getSentOffers = () => api.get('/clause-offers/sent')
 export const acceptOffer = (id) => api.post(`/clause-offers/${id}/accept`)
