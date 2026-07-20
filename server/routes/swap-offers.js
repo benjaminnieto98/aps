@@ -5,6 +5,25 @@ const { logTransfer } = require('../transfers');
 
 const router = express.Router();
 
+// GET /api/swap-offers/all — public feed (paginated, optional status filter)
+router.get('/all', authenticate, async (req, res) => {
+  const limit  = Math.min(parseInt(req.query.limit  || '50', 10), 100);
+  const offset = parseInt(req.query.offset || '0', 10);
+  const status = req.query.status || '';
+  try {
+    const where  = status ? 'WHERE status = $3' : '';
+    const params = status ? [limit, offset, status] : [limit, offset];
+    const [rowsRes, countRes] = await Promise.all([
+      pool.query(`SELECT * FROM swap_offers ${where} ORDER BY created_at DESC LIMIT $1 OFFSET $2`, params),
+      pool.query(`SELECT COUNT(*)::int as total FROM swap_offers ${where}`, status ? [status] : []),
+    ]);
+    res.json({ total: countRes.rows[0].total, offers: rowsRes.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
 // GET /api/swap-offers/received — pending swaps where current user is receiver
 router.get('/received', authenticate, async (req, res) => {
   try {

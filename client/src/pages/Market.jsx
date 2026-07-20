@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { getMarketPlayers, getClausePlayers, getFreePlayers, buyPlayer, makeDirectOffer, getSentOffers, acceptRaisedOffer, cancelOffer, getAllClauseOffers } from '../api'
+import { getMarketPlayers, getClausePlayers, getFreePlayers, buyPlayer, makeDirectOffer, getSentOffers, acceptRaisedOffer, cancelOffer, getAllClauseOffers, getAllSwapOffers, getSentSwaps, cancelSwap } from '../api'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, ratingColor } from '../utils/format'
 import SwapModal from '../components/SwapModal'
@@ -73,65 +73,85 @@ const OFFER_STATUS_LABELS = {
 
 const PAGE_SIZE_OFFERS = 30
 
-function AllOffersTab() {
-  const [offers, setOffers]       = useState([])
-  const [total,  setTotal]        = useState(0)
-  const [page,   setPage]         = useState(0)
-  const [status, setStatus]       = useState('')
-  const [loading, setLoading]     = useState(true)
+const HIST_STATUS_OPTIONS = [
+  { value: '',           label: 'Todas' },
+  { value: 'pending',    label: 'Pendientes' },
+  { value: 'raised',     label: 'Subidas' },
+  { value: 'accepted',   label: 'Aceptadas' },
+  { value: 'rejected',   label: 'Rechazadas' },
+  { value: 'cancelled',  label: 'Canceladas' },
+]
 
-  const load = (s, p) => {
+function fmtDate(ts) {
+  if (!ts) return '—'
+  return new Date(ts).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+    + ' ' + new Date(ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function StatusFilterBar({ status, onChange, total, label }) {
+  return (
+    <div className="flex flex-wrap gap-2 items-center">
+      {HIST_STATUS_OPTIONS.map(opt => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            status === opt.value
+              ? 'bg-green-500 border-green-500 text-white'
+              : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+      <span className="text-gray-600 text-xs ml-auto">{total} {label}</span>
+    </div>
+  )
+}
+
+function Pagination({ page, totalPages, onPage }) {
+  if (totalPages <= 1) return null
+  return (
+    <div className="flex items-center justify-between">
+      <button onClick={() => onPage(p => Math.max(0, p - 1))} disabled={page === 0}
+        className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-white rounded-lg transition-colors">
+        ← Anterior
+      </button>
+      <span className="text-sm text-gray-400">{page + 1} / {totalPages}</span>
+      <button onClick={() => onPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+        className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-white rounded-lg transition-colors">
+        Siguiente →
+      </button>
+    </div>
+  )
+}
+
+// ── Historial: cláusulas y ofertas directas ──
+function ClauseHistTab() {
+  const [offers, setOffers] = useState([])
+  const [total,  setTotal]  = useState(0)
+  const [page,   setPage]   = useState(0)
+  const [status, setStatus] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
     setLoading(true)
-    const params = { limit: PAGE_SIZE_OFFERS, offset: p * PAGE_SIZE_OFFERS }
-    if (s) params.status = s
+    const params = { limit: PAGE_SIZE_OFFERS, offset: page * PAGE_SIZE_OFFERS }
+    if (status) params.status = status
     getAllClauseOffers(params)
-      .then(r => { setOffers(r.data.offers); setTotal(r.data.total) })
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { load(status, page) }, [status, page])
+      .then(r => { if (!cancelled) { setOffers(r.data.offers); setTotal(r.data.total) } })
+      .catch(e => { if (!cancelled) console.error(e) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [status, page])
 
   const handleStatus = (s) => { setStatus(s); setPage(0) }
-
   const totalPages = Math.ceil(total / PAGE_SIZE_OFFERS)
-
-  const formatDate = (ts) => {
-    if (!ts) return '—'
-    return new Date(ts).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-      + ' ' + new Date(ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-  }
-
-  const STATUS_FILTER_OPTIONS = [
-    { value: '',          label: 'Todas' },
-    { value: 'pending',   label: 'Pendientes' },
-    { value: 'raised',    label: 'Subidas' },
-    { value: 'accepted',  label: 'Aceptadas' },
-    { value: 'rejected',  label: 'Rechazadas' },
-    { value: 'cancelled', label: 'Canceladas' },
-  ]
 
   return (
     <div className="space-y-4">
-      {/* Status filter */}
-      <div className="flex flex-wrap gap-2">
-        {STATUS_FILTER_OPTIONS.map(opt => (
-          <button
-            key={opt.value}
-            onClick={() => handleStatus(opt.value)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              status === opt.value
-                ? 'bg-green-500 border-green-500 text-white'
-                : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
-        <span className="text-gray-600 text-xs self-center ml-auto">{total} oferta{total !== 1 ? 's' : ''}</span>
-      </div>
-
-      {/* List */}
+      <StatusFilterBar status={status} onChange={handleStatus} total={total} label={`oferta${total !== 1 ? 's' : ''}`} />
       <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
         {loading ? (
           <div className="text-gray-400 text-center py-12">Cargando...</div>
@@ -142,22 +162,15 @@ function AllOffersTab() {
             {offers.map(o => {
               const st = OFFER_STATUS_LABELS[o.status] || OFFER_STATUS_LABELS.pending
               const isClause = o.offer_type !== 'offer'
-              const displayAmount = o.status === 'accepted' && o.new_clause_amount
-                ? o.new_clause_amount
-                : o.clause_amount
+              const displayAmount = o.status === 'accepted' && o.new_clause_amount ? o.new_clause_amount : o.clause_amount
               return (
                 <div key={o.id} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-800/30 transition-colors">
-                  {/* Player info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-white font-medium text-sm">{o.player_name}</span>
                       <span className="text-yellow-400 text-xs font-bold">{o.player_rating}</span>
                       <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{o.player_position}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded border ${
-                        isClause
-                          ? 'text-orange-400 border-orange-400/30 bg-orange-400/10'
-                          : 'text-blue-400 border-blue-400/30 bg-blue-400/10'
-                      }`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded border ${isClause ? 'text-orange-400 border-orange-400/30 bg-orange-400/10' : 'text-blue-400 border-blue-400/30 bg-blue-400/10'}`}>
                         {isClause ? 'Cláusula' : 'Oferta directa'}
                       </span>
                     </div>
@@ -166,22 +179,15 @@ function AllOffersTab() {
                       <span className="text-gray-600">→</span>
                       <span className="text-gray-300">{o.owner_username}</span>
                       <span className="text-gray-700">·</span>
-                      <span>{formatDate(o.created_at)}</span>
+                      <span>{fmtDate(o.created_at)}</span>
                     </div>
-                    {/* Show raised amount if applicable */}
                     {o.new_clause_amount && o.status !== 'accepted' && (
-                      <div className="text-orange-400 text-xs mt-0.5">
-                        Cláusula subida a {formatMoney(o.new_clause_amount)}
-                      </div>
+                      <div className="text-orange-400 text-xs mt-0.5">Cláusula subida a {formatMoney(o.new_clause_amount)}</div>
                     )}
                   </div>
-
-                  {/* Amount + status */}
                   <div className="text-right shrink-0 space-y-1">
                     <div className="text-green-400 font-bold text-sm">{formatMoney(displayAmount)}</div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full border inline-block ${st.color}`}>
-                      {st.label}
-                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border inline-block ${st.color}`}>{st.label}</span>
                   </div>
                 </div>
               )
@@ -189,32 +195,115 @@ function AllOffersTab() {
           </div>
         )}
       </div>
+      <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+    </div>
+  )
+}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-gray-500 text-sm">
-            {page * PAGE_SIZE_OFFERS + 1}–{Math.min((page + 1) * PAGE_SIZE_OFFERS, total)} de {total}
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-white rounded-lg transition-colors"
-            >
-              ← Anterior
-            </button>
-            <span className="px-3 py-1.5 text-sm text-gray-400">{page + 1} / {totalPages}</span>
-            <button
-              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-              disabled={page >= totalPages - 1}
-              className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-white rounded-lg transition-colors"
-            >
-              Siguiente →
-            </button>
+// ── Historial: intercambios ──
+function SwapHistTab() {
+  const [offers, setOffers] = useState([])
+  const [total,  setTotal]  = useState(0)
+  const [page,   setPage]   = useState(0)
+  const [status, setStatus] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    const params = { limit: PAGE_SIZE_OFFERS, offset: page * PAGE_SIZE_OFFERS }
+    if (status) params.status = status
+    getAllSwapOffers(params)
+      .then(r => { if (!cancelled) { setOffers(r.data.offers); setTotal(r.data.total) } })
+      .catch(e => { if (!cancelled) console.error(e) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [status, page])
+
+  const handleStatus = (s) => { setStatus(s); setPage(0) }
+  const totalPages = Math.ceil(total / PAGE_SIZE_OFFERS)
+
+  return (
+    <div className="space-y-4">
+      <StatusFilterBar status={status} onChange={handleStatus} total={total} label={`intercambio${total !== 1 ? 's' : ''}`} />
+      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+        {loading ? (
+          <div className="text-gray-400 text-center py-12">Cargando...</div>
+        ) : offers.length === 0 ? (
+          <div className="text-gray-500 text-center py-12 text-sm">No hay intercambios registrados</div>
+        ) : (
+          <div className="divide-y divide-gray-800/50">
+            {offers.map(o => {
+              const st = OFFER_STATUS_LABELS[o.status] || OFFER_STATUS_LABELS.pending
+              const cashDiff = o.cash_difference || 0
+              return (
+                <div key={o.id} className="px-4 py-3 hover:bg-gray-800/30 transition-colors">
+                  <div className="flex items-start gap-3">
+                    {/* Swap details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap text-sm">
+                        <span className="text-purple-400 font-semibold">{o.proposer_username}</span>
+                        <span className="text-gray-600">propone a</span>
+                        <span className="text-gray-300 font-medium">{o.receiver_username}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <span className="bg-gray-800 rounded-lg px-2 py-1 text-xs">
+                          <span className="text-white font-medium">{o.offered_player_name}</span>
+                          <span className="text-yellow-400 font-bold ml-1">{o.offered_player_rating}</span>
+                          <span className="text-gray-500 ml-1">{o.offered_player_position}</span>
+                        </span>
+                        <span className="text-gray-500">⇌</span>
+                        <span className="bg-gray-800 rounded-lg px-2 py-1 text-xs">
+                          <span className="text-white font-medium">{o.requested_player_name}</span>
+                          <span className="text-yellow-400 font-bold ml-1">{o.requested_player_rating}</span>
+                          <span className="text-gray-500 ml-1">{o.requested_player_position}</span>
+                        </span>
+                      </div>
+                      {cashDiff !== 0 && (
+                        <div className={`text-xs mt-1 ${cashDiff > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {cashDiff > 0
+                            ? `+ ${formatMoney(cashDiff)} de ${o.proposer_username}`
+                            : `+ ${formatMoney(Math.abs(cashDiff))} de ${o.receiver_username}`}
+                        </div>
+                      )}
+                      <div className="text-gray-600 text-xs mt-1">{fmtDate(o.created_at)}</div>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border inline-block shrink-0 mt-1 ${st.color}`}>{st.label}</span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+      <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+    </div>
+  )
+}
+
+// ── Historial unificado con sub-tabs ──
+function HistorialTab() {
+  const [histType, setHistType] = useState('clauses')
+  return (
+    <div className="space-y-4">
+      <div className="flex bg-gray-900 rounded-xl p-1 border border-gray-800 w-fit gap-1">
+        {[
+          { id: 'clauses', label: 'Cláusulas y ofertas' },
+          { id: 'swaps',   label: 'Intercambios' },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setHistType(t.id)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              histType === t.id ? 'bg-green-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {histType === 'clauses' && <ClauseHistTab />}
+      {histType === 'swaps'   && <SwapHistTab />}
     </div>
   )
 }
@@ -228,6 +317,7 @@ export default function Market() {
   const [clausePlayers, setClausePlayers] = useState([])
   const [freePlayers, setFreePlayers] = useState([])
   const [sentOffers, setSentOffers] = useState([])
+  const [sentSwaps,  setSentSwaps]  = useState([])
   const [loading, setLoading] = useState(true)
   const [confirmPlayer, setConfirmPlayer] = useState(null)
   const [buying, setBuying] = useState(false)
@@ -243,12 +333,13 @@ export default function Market() {
 
   const fetchAll = useCallback(() => {
     setLoading(true)
-    Promise.all([getMarketPlayers(), getClausePlayers(), getFreePlayers(), getSentOffers()])
-      .then(([m, c, f, s]) => {
+    Promise.all([getMarketPlayers(), getClausePlayers(), getFreePlayers(), getSentOffers(), getSentSwaps()])
+      .then(([m, c, f, s, sw]) => {
         setMarketPlayers(m.data)
         setClausePlayers(c.data)
         setFreePlayers(f.data)
         setSentOffers(s.data)
+        setSentSwaps(sw.data)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -337,6 +428,11 @@ export default function Market() {
   }
 
   const pendingCount = sentOffers.filter(o => ['pending', 'raised'].includes(o.status)).length
+    + sentSwaps.filter(o => o.status === 'pending').length
+
+  const handleCancelSwap = async (id) => {
+    try { await cancelSwap(id); fetchAll() } catch (err) { console.error(err) }
+  }
 
   const tabs = [
     { id: 'market',    label: 'En venta',      count: marketPlayers.length },
@@ -511,7 +607,7 @@ export default function Market() {
       )}
 
       {/* Feed de ofertas (público) */}
-      {tab === 'alloffer' && <AllOffersTab />}
+      {tab === 'alloffer' && <HistorialTab />}
 
       {/* Player list */}
       {tab !== 'offers' && tab !== 'alloffer' && (
@@ -548,78 +644,128 @@ export default function Market() {
 
       {/* Sent offers tab */}
       {tab === 'offers' && (
-        <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-          {loading ? (
-            <div className="text-gray-400 text-center py-12">Cargando...</div>
-          ) : sentOffers.length === 0 ? (
-            <div className="text-gray-500 text-center py-12">No enviaste ninguna oferta de cláusula todavía</div>
-          ) : (
-            <div className="divide-y divide-gray-800/50">
-              {sentOffers.map(o => {
-                const statusInfo = STATUS_LABELS[o.status] || STATUS_LABELS.pending
-                const isRaised = o.status === 'raised'
-                const typeLabel = o.offer_type === 'offer' ? 'Oferta directa' : 'Cláusula'
-                return (
-                  <div key={o.id} className="px-4 py-3">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-white font-medium text-sm">{o.player_name}</span>
-                          <span className="text-yellow-400 text-xs font-bold">{o.player_rating}</span>
-                          <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{o.player_position}</span>
-                          <span className={`text-xs px-1.5 py-0.5 rounded border ${o.offer_type === 'offer' ? 'text-blue-400 border-blue-400/30 bg-blue-400/10' : 'text-orange-400 border-orange-400/30 bg-orange-400/10'}`}>
-                            {typeLabel}
-                          </span>
-                        </div>
-                        <div className="text-gray-500 text-xs mt-0.5">
-                          Dueño: {o.owner_username} · {new Date(o.created_at).toLocaleDateString('es-AR')}
+        <div className="space-y-6">
+          {/* Cláusulas y ofertas directas */}
+          <div>
+            <h3 className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Cláusulas y ofertas directas</h3>
+            <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+              {loading ? (
+                <div className="text-gray-400 text-center py-8">Cargando...</div>
+              ) : sentOffers.length === 0 ? (
+                <div className="text-gray-500 text-center py-8 text-sm">No enviaste ninguna oferta todavía</div>
+              ) : (
+                <div className="divide-y divide-gray-800/50">
+                  {sentOffers.map(o => {
+                    const statusInfo = STATUS_LABELS[o.status] || STATUS_LABELS.pending
+                    const isRaised = o.status === 'raised'
+                    const typeLabel = o.offer_type === 'offer' ? 'Oferta directa' : 'Cláusula'
+                    return (
+                      <div key={o.id} className="px-4 py-3">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-white font-medium text-sm">{o.player_name}</span>
+                              <span className="text-yellow-400 text-xs font-bold">{o.player_rating}</span>
+                              <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{o.player_position}</span>
+                              <span className={`text-xs px-1.5 py-0.5 rounded border ${o.offer_type === 'offer' ? 'text-blue-400 border-blue-400/30 bg-blue-400/10' : 'text-orange-400 border-orange-400/30 bg-orange-400/10'}`}>
+                                {typeLabel}
+                              </span>
+                            </div>
+                            <div className="text-gray-500 text-xs mt-0.5">
+                              Dueño: {o.owner_username} · {new Date(o.created_at).toLocaleDateString('es-AR')}
+                            </div>
+                            {isRaised && o.new_clause_amount && (
+                              <div className="text-orange-300 text-xs mt-1 bg-orange-500/10 border border-orange-500/20 rounded px-2 py-1">
+                                El dueño subió la cláusula a <strong>{formatMoney(o.new_clause_amount)}</strong>. ¿Aceptás?
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-green-400 font-bold text-sm">{formatMoney(o.clause_amount)}</div>
+                            <span className={`text-xs px-2 py-0.5 rounded-full border mt-1 inline-block ${statusInfo.color}`}>
+                              {statusInfo.label}
+                            </span>
+                          </div>
                         </div>
                         {isRaised && o.new_clause_amount && (
-                          <div className="text-orange-300 text-xs mt-1 bg-orange-500/10 border border-orange-500/20 rounded px-2 py-1">
-                            El dueño subió la cláusula a <strong>{formatMoney(o.new_clause_amount)}</strong>. ¿Aceptás?
+                          <div className="flex gap-2 mt-2">
+                            <button onClick={() => handleAcceptRaised(o.id)} className="bg-green-600 hover:bg-green-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                              Aceptar y pagar {formatMoney(o.new_clause_amount)}
+                            </button>
+                            <button onClick={() => handleCancelOffer(o.id)} className="bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                              Retirarme
+                            </button>
+                          </div>
+                        )}
+                        {o.status === 'pending' && (
+                          <div className="mt-2">
+                            <button onClick={() => handleCancelOffer(o.id)} className="text-gray-500 hover:text-red-400 text-xs transition-colors">
+                              Cancelar oferta
+                            </button>
                           </div>
                         )}
                       </div>
-                      <div className="text-right shrink-0">
-                        <div className="text-green-400 font-bold text-sm">{formatMoney(o.clause_amount)}</div>
-                        <span className={`text-xs px-2 py-0.5 rounded-full border mt-1 inline-block ${statusInfo.color}`}>
-                          {statusInfo.label}
-                        </span>
-                      </div>
-                    </div>
-                    {/* Action buttons for raised offers */}
-                    {isRaised && o.new_clause_amount && (
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          onClick={() => handleAcceptRaised(o.id)}
-                          className="bg-green-600 hover:bg-green-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                          Aceptar y pagar {formatMoney(o.new_clause_amount)}
-                        </button>
-                        <button
-                          onClick={() => handleCancelOffer(o.id)}
-                          className="bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                          Retirarme
-                        </button>
-                      </div>
-                    )}
-                    {/* Cancel pending offers */}
-                    {o.status === 'pending' && (
-                      <div className="mt-2">
-                        <button
-                          onClick={() => handleCancelOffer(o.id)}
-                          className="text-gray-500 hover:text-red-400 text-xs transition-colors"
-                        >
-                          Cancelar oferta
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Intercambios enviados */}
+          <div>
+            <h3 className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Intercambios propuestos</h3>
+            <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+              {loading ? (
+                <div className="text-gray-400 text-center py-8">Cargando...</div>
+              ) : sentSwaps.length === 0 ? (
+                <div className="text-gray-500 text-center py-8 text-sm">No propusiste ningún intercambio todavía</div>
+              ) : (
+                <div className="divide-y divide-gray-800/50">
+                  {sentSwaps.map(o => {
+                    const st = OFFER_STATUS_LABELS[o.status] || OFFER_STATUS_LABELS.pending
+                    const cashDiff = o.cash_difference || 0
+                    return (
+                      <div key={o.id} className="px-4 py-3">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-gray-500 text-xs mb-1.5">Para: <span className="text-gray-300">{o.receiver_username}</span></div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs">
+                                <span className="text-white font-medium">{o.offered_player_name}</span>
+                                <span className="text-yellow-400 font-bold ml-1">{o.offered_player_rating}</span>
+                                <span className="text-gray-500 ml-1">{o.offered_player_position}</span>
+                              </span>
+                              <span className="text-purple-400 font-bold">⇌</span>
+                              <span className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs">
+                                <span className="text-white font-medium">{o.requested_player_name}</span>
+                                <span className="text-yellow-400 font-bold ml-1">{o.requested_player_rating}</span>
+                                <span className="text-gray-500 ml-1">{o.requested_player_position}</span>
+                              </span>
+                            </div>
+                            {cashDiff !== 0 && (
+                              <div className={`text-xs mt-1 ${cashDiff > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {cashDiff > 0 ? `Yo pago +${formatMoney(cashDiff)}` : `Ellos pagan +${formatMoney(Math.abs(cashDiff))}`}
+                              </div>
+                            )}
+                            <div className="text-gray-600 text-xs mt-1">{new Date(o.created_at).toLocaleDateString('es-AR')}</div>
+                          </div>
+                          <span className={`text-xs px-2 py-0.5 rounded-full border inline-block shrink-0 mt-1 ${st.color}`}>{st.label}</span>
+                        </div>
+                        {o.status === 'pending' && (
+                          <div className="mt-2">
+                            <button onClick={() => handleCancelSwap(o.id)} className="text-gray-500 hover:text-red-400 text-xs transition-colors">
+                              Cancelar intercambio
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
