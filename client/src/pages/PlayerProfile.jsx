@@ -1,33 +1,188 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getPlayerProfile } from '../api'
+import { getPlayerProfile, getMyPlayers, proposeSwap } from '../api'
+import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, ratingColor } from '../utils/format'
 
 const TYPE_LABELS = {
-  compra:     { label: 'Compra',     color: 'text-blue-400' },
-  liberacion: { label: 'Liberación', color: 'text-red-400' },
-  asignacion: { label: 'Asignación', color: 'text-green-400' },
-  reset:      { label: 'Reset',      color: 'text-gray-400' },
+  compra:       { label: 'Compra',       color: 'text-blue-400' },
+  liberacion:   { label: 'Liberación',   color: 'text-red-400' },
+  asignacion:   { label: 'Asignación',   color: 'text-green-400' },
+  reset:        { label: 'Reset',        color: 'text-gray-400' },
+  intercambio:  { label: 'Intercambio',  color: 'text-purple-400' },
 }
 
 const POS_COLORS = {
-  GK: 'bg-yellow-500/20 text-yellow-300',
-  CB: 'bg-blue-500/20 text-blue-300', LB: 'bg-blue-500/20 text-blue-300',
+  GK:  'bg-yellow-500/20 text-yellow-300',
+  CB:  'bg-blue-500/20 text-blue-300', LB: 'bg-blue-500/20 text-blue-300',
   CDM: 'bg-purple-500/20 text-purple-300', CM: 'bg-purple-500/20 text-purple-300', CAM: 'bg-purple-500/20 text-purple-300',
-  LW: 'bg-green-500/20 text-green-300', ST: 'bg-green-500/20 text-green-300',
+  LW:  'bg-green-500/20 text-green-300', ST: 'bg-green-500/20 text-green-300',
 }
 
 function formatDate(ts) {
   if (!ts) return '—'
-  return new Date(ts).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit',  hour: '2-digit', minute: '2-digit' })
+  return new Date(ts).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function SwapModal({ player, onClose }) {
+  const [myPlayers, setMyPlayers] = useState([])
+  const [selectedId, setSelectedId] = useState('')
+  const [cashDir, setCashDir] = useState('none')   // 'none' | 'i_pay' | 'they_pay'
+  const [cashAmt, setCashAmt] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [fetchingPlayers, setFetchingPlayers] = useState(true)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  useEffect(() => {
+    getMyPlayers()
+      .then(r => {
+        setMyPlayers(r.data)
+        if (r.data.length > 0) setSelectedId(r.data[0].id)
+      })
+      .catch(() => setError('No se pudo cargar tu plantel'))
+      .finally(() => setFetchingPlayers(false))
+  }, [])
+
+  const handlePropose = async () => {
+    if (!selectedId) return setError('Elegí tu jugador')
+    setLoading(true); setError('')
+
+    let cash_difference = 0
+    const parsed = parseInt(cashAmt, 10) || 0
+    if (cashDir === 'i_pay') cash_difference = parsed
+    if (cashDir === 'they_pay') cash_difference = -parsed
+
+    try {
+      await proposeSwap({
+        offered_player_id: selectedId,
+        requested_player_id: player.id,
+        cash_difference,
+      })
+      setSuccess('¡Oferta enviada!')
+      setTimeout(onClose, 1500)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al enviar')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const selectedPlayer = myPlayers.find(p => p.id === selectedId)
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+      <div className="bg-gray-900 rounded-xl p-5 w-full max-w-md border border-gray-700">
+        <h3 className="text-white font-semibold mb-4">Proponer intercambio</h3>
+
+        {fetchingPlayers ? (
+          <div className="text-gray-400 text-sm text-center py-4">Cargando plantel...</div>
+        ) : myPlayers.length === 0 ? (
+          <div className="text-gray-500 text-sm text-center py-4">No tenés jugadores para intercambiar</div>
+        ) : (
+          <>
+            {/* Player comparison */}
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-start mb-4">
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-gray-500 text-xs mb-2">Ofrezco</p>
+                <select
+                  value={selectedId}
+                  onChange={e => setSelectedId(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-md px-2 py-1.5 text-white text-xs focus:outline-none focus:border-purple-500"
+                >
+                  {myPlayers.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.rating})</option>
+                  ))}
+                </select>
+                {selectedPlayer && (
+                  <div className="mt-1.5 text-gray-400 text-xs">{selectedPlayer.position} · {selectedPlayer.nationality}</div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-center pt-6 text-gray-500 text-lg">⇌</div>
+
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-gray-500 text-xs mb-2">Pido</p>
+                <p className="text-white font-semibold text-sm">{player.name}</p>
+                <p className={`text-sm font-bold ${ratingColor(player.rating)}`}>{player.rating}</p>
+                <div className="mt-0.5 text-gray-400 text-xs">{player.position} · {player.nationality}</div>
+              </div>
+            </div>
+
+            {/* Cash compensation */}
+            <div className="mb-4">
+              <p className="text-gray-400 text-xs mb-2">Compensación económica</p>
+              <div className="flex gap-1.5 mb-2 flex-wrap">
+                {[
+                  { key: 'none',     label: 'Sin compensación' },
+                  { key: 'i_pay',    label: 'Yo pago' },
+                  { key: 'they_pay', label: 'El otro paga' },
+                ].map(opt => (
+                  <button
+                    key={opt.key}
+                    onClick={() => { setCashDir(opt.key); setCashAmt('') }}
+                    className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                      cashDir === opt.key
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-700 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {cashDir !== 'none' && (
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Monto de compensación"
+                  value={cashAmt}
+                  onChange={e => setCashAmt(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+                  autoFocus
+                />
+              )}
+              {cashDir === 'i_pay' && parseInt(cashAmt) > 0 && (
+                <p className="text-xs text-purple-300 mt-1">Pagás {formatMoney(parseInt(cashAmt))} a {player.owner_username} además del intercambio</p>
+              )}
+              {cashDir === 'they_pay' && parseInt(cashAmt) > 0 && (
+                <p className="text-xs text-purple-300 mt-1">{player.owner_username} te paga {formatMoney(parseInt(cashAmt))} además del intercambio</p>
+              )}
+            </div>
+
+            {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
+            {success && <p className="text-green-400 text-xs mb-3">{success}</p>}
+
+            <div className="flex gap-2">
+              <button
+                onClick={handlePropose}
+                disabled={loading || !selectedId}
+                className="flex-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+              >
+                {loading ? 'Enviando...' : 'Proponer intercambio'}
+              </button>
+              <button
+                onClick={onClose}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function PlayerProfile() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showSwapModal, setShowSwapModal] = useState(false)
 
   useEffect(() => {
     getPlayerProfile(id)
@@ -46,10 +201,10 @@ export default function PlayerProfile() {
 
   const { player, history, goals } = data
   const posColor = POS_COLORS[player.position] || 'bg-gray-700 text-gray-300'
+  const canPropose = user && player.owner_id && player.owner_id !== user.id
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
-      {/* Back */}
       <button
         onClick={() => navigate(-1)}
         className="text-gray-400 hover:text-white text-sm flex items-center gap-1 transition-colors"
@@ -99,6 +254,18 @@ export default function PlayerProfile() {
             <div className="text-gray-500 text-xs mt-0.5">Dueño actual</div>
           </div>
         </div>
+
+        {/* Swap button */}
+        {canPropose && (
+          <div className="mt-4 pt-4 border-t border-gray-800">
+            <button
+              onClick={() => setShowSwapModal(true)}
+              className="w-full bg-purple-700 hover:bg-purple-600 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              ⇌ Proponer intercambio con {player.owner_username}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Transfer history */}
@@ -149,6 +316,10 @@ export default function PlayerProfile() {
           </div>
         )}
       </div>
+
+      {showSwapModal && (
+        <SwapModal player={player} onClose={() => setShowSwapModal(false)} />
+      )}
     </div>
   )
 }

@@ -13,6 +13,7 @@ const matchesRoutes = require('./routes/matches');
 const configRoutes = require('./routes/config');
 const transfersRoutes = require('./routes/transfers');
 const clauseOffersRoutes = require('./routes/clause-offers');
+const swapOffersRoutes = require('./routes/swap-offers');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -33,6 +34,7 @@ app.use('/api/matches', matchesRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/transfers', transfersRoutes);
 app.use('/api/clause-offers', clauseOffersRoutes);
+app.use('/api/swap-offers', swapOffersRoutes);
 
 // Stats
 app.get('/api/stats/scorers', async (req, res) => {

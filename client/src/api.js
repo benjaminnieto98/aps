@@ -77,6 +77,14 @@ export const rejectOffer = (id) => api.post(`/clause-offers/${id}/reject`)
 // Player profile
 export const getPlayerProfile = (id) => api.get(`/players/${id}/profile`)
 
+// Swap offers
+export const proposeSwap = (data) => api.post('/swap-offers', data)
+export const getReceivedSwaps = () => api.get('/swap-offers/received')
+export const getSentSwaps = () => api.get('/swap-offers/sent')
+export const acceptSwap = (id) => api.post(`/swap-offers/${id}/accept`)
+export const rejectSwap = (id) => api.post(`/swap-offers/${id}/reject`)
+export const cancelSwap = (id) => api.post(`/swap-offers/${id}/cancel`)
+
 // Stats records
 export const getRecords = () => api.get('/stats/records')
 export const getH2H = (user1, user2) => api.get('/stats/h2h', { params: { user1, user2 } })

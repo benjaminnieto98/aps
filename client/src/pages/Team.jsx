@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMyPlayers, listPlayer, unlistPlayer, setClause, removeClause, releasePlayer, getPublicConfig, getReceivedOffers, acceptOffer, raiseClauseOffer, rejectOffer } from '../api'
+import { getMyPlayers, listPlayer, unlistPlayer, setClause, removeClause, releasePlayer, getPublicConfig, getReceivedOffers, acceptOffer, raiseClauseOffer, rejectOffer, getReceivedSwaps, acceptSwap, rejectSwap } from '../api'
 import { formatMoney, positionOrder, positionLabel, ratingColor } from '../utils/format'
 
 function PlayerCard({ player, onRefresh, config, rosterCount, minRoster, navigate }) {
@@ -396,6 +396,108 @@ function ReceivedOffers({ onRefresh }) {
   )
 }
 
+function ReceivedSwapOffers({ onRefresh }) {
+  const [swaps, setSwaps] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  const fetchSwaps = () => getReceivedSwaps().then(r => setSwaps(r.data)).catch(console.error)
+  useEffect(() => { fetchSwaps() }, [])
+
+  const flash = (text) => { setMsg(text); setTimeout(() => setMsg(''), 4000) }
+
+  const handleAccept = async (id) => {
+    setLoading(true)
+    try { await acceptSwap(id); flash('Intercambio aceptado'); fetchSwaps(); onRefresh() }
+    catch (err) { flash(err.response?.data?.error || 'Error al aceptar') }
+    finally { setLoading(false) }
+  }
+
+  const handleReject = async (id) => {
+    setLoading(true)
+    try { await rejectSwap(id); flash('Intercambio rechazado'); fetchSwaps() }
+    catch (err) { flash(err.response?.data?.error || 'Error') }
+    finally { setLoading(false) }
+  }
+
+  if (swaps.length === 0) return null
+
+  return (
+    <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 space-y-3">
+      <h2 className="text-purple-300 font-semibold text-sm flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+        Intercambios recibidos ({swaps.length})
+      </h2>
+      {msg && <div className="text-green-400 text-xs bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">{msg}</div>}
+      {swaps.map(s => {
+        const cashDiff = s.cash_difference || 0
+        return (
+          <div key={s.id} className="bg-gray-900 rounded-xl p-4 border border-gray-700 space-y-3">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span className="text-purple-400 font-medium">{s.proposer_username}</span>
+              <span>propone un intercambio</span>
+            </div>
+
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+              {/* What you give up */}
+              <div className="bg-gray-800 rounded-lg p-2.5">
+                <p className="text-gray-500 text-xs mb-1">Vos dás</p>
+                <p className="text-white text-sm font-semibold">{s.requested_player_name}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`text-xs font-bold ${ratingColor(s.requested_player_rating)}`}>{s.requested_player_rating}</span>
+                  <span className="text-gray-500 text-xs">{s.requested_player_position}</span>
+                </div>
+              </div>
+
+              <div className="text-gray-500 text-center text-lg">⇌</div>
+
+              {/* What you get */}
+              <div className="bg-gray-800 rounded-lg p-2.5">
+                <p className="text-gray-500 text-xs mb-1">Recibís</p>
+                <p className="text-white text-sm font-semibold">{s.offered_player_name}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`text-xs font-bold ${ratingColor(s.offered_player_rating)}`}>{s.offered_player_rating}</span>
+                  <span className="text-gray-500 text-xs">{s.offered_player_position}</span>
+                </div>
+              </div>
+            </div>
+
+            {cashDiff !== 0 && (
+              <div className={`rounded-lg px-3 py-2 text-xs font-medium ${
+                cashDiff > 0
+                  ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+                  : 'bg-red-500/10 border border-red-500/20 text-red-400'
+              }`}>
+                {cashDiff > 0
+                  ? `+ recibís ${formatMoney(cashDiff)} de compensación de ${s.proposer_username}`
+                  : `− pagás ${formatMoney(Math.abs(cashDiff))} de compensación a ${s.proposer_username}`
+                }
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleAccept(s.id)}
+                disabled={loading}
+                className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+              >
+                Aceptar
+              </button>
+              <button
+                onClick={() => handleReject(s.id)}
+                disabled={loading}
+                className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+              >
+                Rechazar
+              </button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Team() {
   const navigate = useNavigate()
   const [players, setPlayers] = useState([])
@@ -435,6 +537,7 @@ export default function Team() {
   return (
     <div className="space-y-6">
       <ReceivedOffers onRefresh={fetchPlayers} />
+      <ReceivedSwapOffers onRefresh={fetchPlayers} />
 
       <div className="flex items-center justify-between">
         <div>

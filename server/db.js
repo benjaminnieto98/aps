@@ -120,6 +120,26 @@ async function initDb() {
       price INTEGER,
       created_at BIGINT
     );
+
+    CREATE TABLE IF NOT EXISTS swap_offers (
+      id SERIAL PRIMARY KEY,
+      proposer_id INTEGER,
+      proposer_username TEXT,
+      offered_player_id TEXT,
+      offered_player_name TEXT,
+      offered_player_rating INTEGER,
+      offered_player_position TEXT,
+      receiver_id INTEGER,
+      receiver_username TEXT,
+      requested_player_id TEXT,
+      requested_player_name TEXT,
+      requested_player_rating INTEGER,
+      requested_player_position TEXT,
+      cash_difference INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pending',
+      created_at BIGINT,
+      resolved_at BIGINT
+    );
   `);
 
   // Retroactive: set purchase_count from transfer history (runs safely on each startup)
