@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { getMarketPlayers, getClausePlayers, getFreePlayers, buyPlayer, makeDirectOffer, getSentOffers, acceptRaisedOffer, cancelOffer, getAllClauseOffers } from '../api'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, ratingColor } from '../utils/format'
+import SwapModal from '../components/SwapModal'
 
 const STATUS_LABELS = {
   pending:   { label: 'Pendiente',       color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
@@ -13,7 +14,7 @@ const STATUS_LABELS = {
 
 const ALL_POSITIONS = ['GK', 'CB', 'LB', 'CDM', 'CM', 'CAM', 'LW', 'ST']
 
-function PlayerRow({ player, priceField, onBuy, isClause, onDirectOffer }) {
+function PlayerRow({ player, priceField, onBuy, isClause, onDirectOffer, onSwap }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors">
       <div className="flex-1 min-w-0">
@@ -35,6 +36,14 @@ function PlayerRow({ player, priceField, onBuy, isClause, onDirectOffer }) {
             className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-blue-700 hover:bg-blue-600"
           >
             Hacer oferta
+          </button>
+        )}
+        {isClause && onSwap && (
+          <button
+            onClick={() => onSwap(player)}
+            className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-purple-700 hover:bg-purple-600"
+          >
+            ⇌ Intercambio
           </button>
         )}
         <button
@@ -226,6 +235,8 @@ export default function Market() {
   const [buySuccess, setBuySuccess] = useState('')
   // Direct offer modal (below-clause)
   const [directOfferPlayer, setDirectOfferPlayer] = useState(null)
+  // Swap modal
+  const [swapPlayer, setSwapPlayer] = useState(null)
   const [directOfferAmt, setDirectOfferAmt] = useState('')
   const [directOfferErr, setDirectOfferErr] = useState('')
   const [directOfferLoading, setDirectOfferLoading] = useState(false)
@@ -526,6 +537,7 @@ export default function Market() {
                     onBuy={setConfirmPlayer}
                     isClause={isClauseTab}
                     onDirectOffer={isClauseTab ? setDirectOfferPlayer : null}
+                    onSwap={isClauseTab ? setSwapPlayer : null}
                   />
                 ))}
               </div>
@@ -668,6 +680,15 @@ export default function Market() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Swap modal */}
+      {swapPlayer && (
+        <SwapModal
+          player={swapPlayer}
+          onClose={() => setSwapPlayer(null)}
+          onSuccess={() => setBuySuccess(`Oferta de intercambio enviada por ${swapPlayer.name}`)}
+        />
       )}
 
       {/* Direct offer modal */}
