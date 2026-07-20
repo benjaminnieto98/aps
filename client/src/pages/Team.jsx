@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMyPlayers, listPlayer, unlistPlayer, setClause, removeClause, releasePlayer, getPublicConfig, getReceivedOffers, acceptOffer, raiseClauseOffer, rejectOffer, getReceivedSwaps, acceptSwap, rejectSwap } from '../api'
 import { formatMoney, positionOrder, positionLabel, ratingColor } from '../utils/format'
+import { useAuth } from '../contexts/AuthContext'
+import LineupBuilder from '../components/LineupBuilder'
 
 function PlayerCard({ player, onRefresh, config, rosterCount, minRoster, navigate }) {
   const [showListModal, setShowListModal]       = useState(false)
@@ -500,6 +502,8 @@ function ReceivedSwapOffers({ onRefresh }) {
 
 export default function Team() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const [section, setSection] = useState('squad')
   const [players, setPlayers] = useState([])
   const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -553,29 +557,53 @@ export default function Team() {
         </div>
       </div>
 
-      {players.length === 0 ? (
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-12 text-center">
-          <div className="text-gray-500 text-lg mb-2">No tienes jugadores</div>
-          <p className="text-gray-600 text-sm">Un administrador debe asignarte un equipo, o puedes comprar agentes libres en el mercado.</p>
-        </div>
-      ) : (
-        Object.entries(grouped).map(([pos, posPlayers]) => (
-          <div key={pos}>
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-white font-semibold text-sm">{positionLabel[pos] || pos}</h2>
-              <span className="text-gray-500 text-xs">({posPlayers.length})</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {posPlayers.map(p => (
-                <PlayerCard
-                  key={p.id} player={p} onRefresh={fetchPlayers}
-                  config={config} rosterCount={players.length} minRoster={minRoster}
-                  navigate={navigate}
-                />
-              ))}
-            </div>
+      {/* Section tabs */}
+      <div className="flex bg-gray-900 rounded-xl p-1 border border-gray-800 w-fit gap-1">
+        {[
+          { id: 'squad',  label: 'Plantel' },
+          { id: 'lineup', label: 'Alineación' },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setSection(t.id)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              section === t.id ? 'bg-green-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {section === 'lineup' && (
+        <LineupBuilder players={players} userId={user?.id} />
+      )}
+
+      {section === 'squad' && (
+        players.length === 0 ? (
+          <div className="bg-gray-900 rounded-xl border border-gray-800 p-12 text-center">
+            <div className="text-gray-500 text-lg mb-2">No tienes jugadores</div>
+            <p className="text-gray-600 text-sm">Un administrador debe asignarte un equipo, o puedes comprar agentes libres en el mercado.</p>
           </div>
-        ))
+        ) : (
+          Object.entries(grouped).map(([pos, posPlayers]) => (
+            <div key={pos}>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-white font-semibold text-sm">{positionLabel[pos] || pos}</h2>
+                <span className="text-gray-500 text-xs">({posPlayers.length})</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {posPlayers.map(p => (
+                  <PlayerCard
+                    key={p.id} player={p} onRefresh={fetchPlayers}
+                    config={config} rosterCount={players.length} minRoster={minRoster}
+                    navigate={navigate}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
+        )
       )}
     </div>
   )
