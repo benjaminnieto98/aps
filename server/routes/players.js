@@ -91,11 +91,10 @@ router.get('/clauses', authenticate, async (req, res) => {
     const cfg = Object.fromEntries(cfgRows.map(r => [r.key, r.value]));
 
     const { rows } = await pool.query(`
-      SELECT p.*, u.username as owner_username
+      SELECT p.*, u.username as owner_username, (p.owner_id = $1) as is_own
       FROM players p
       LEFT JOIN users u ON p.owner_id = u.id
       WHERE p.owner_id IS NOT NULL
-        AND p.owner_id != $1
         AND p.listed_price IS NULL
       ORDER BY p.rating DESC
     `, [req.user.id]);

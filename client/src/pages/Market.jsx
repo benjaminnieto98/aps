@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { getMarketPlayers, getClausePlayers, getFreePlayers, buyPlayer, makeDirectOffer, getSentOffers, acceptRaisedOffer, cancelOffer, getAllClauseOffers, getAllSwapOffers, getSentSwaps, cancelSwap } from '../api'
+import { getMarketPlayers, getClausePlayers, getFreePlayers, buyPlayer, makeDirectOffer, getSentOffers, acceptRaisedOffer, cancelOffer, getAllClauseOffers, getAllSwapOffers, getSentSwaps, cancelSwap, listPlayer, setClause, releasePlayer, getPublicConfig } from '../api'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, ratingColor } from '../utils/format'
 import SwapModal from '../components/SwapModal'
@@ -14,54 +14,179 @@ const STATUS_LABELS = {
 
 const ALL_POSITIONS = ['GK', 'CB', 'LB', 'CDM', 'CM', 'CAM', 'LW', 'ST']
 
-function PlayerRow({ player, priceField, onBuy, isClause, onDirectOffer, onSwap }) {
+function PlayerRow({ player, priceField, onBuy, isClause, onDirectOffer, onSwap, onOwnAction }) {
+  const isOwn = !!player.is_own
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors">
+    <div className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors ${isOwn ? 'bg-blue-500/5' : ''}`}>
       <div className="flex-1 min-w-0">
-        <div className="text-white font-medium text-sm">{player.name}</div>
+        <div className="flex items-center gap-2">
+          <span className="text-white font-medium text-sm">{player.name}</span>
+          {isOwn && <span className="text-blue-400 text-xs bg-blue-400/10 border border-blue-400/30 px-1.5 py-0.5 rounded">Mi jugador</span>}
+        </div>
         <div className="text-gray-500 text-xs">{player.nationality} · {player.pes_team}</div>
-        {player.owner_username && (
+        {player.owner_username && !isOwn && (
           <div className="text-gray-600 text-xs">Dueño: {player.owner_username}</div>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap justify-end">
         <span className={`text-sm font-bold ${ratingColor(player.rating)}`}>{player.rating}</span>
         <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{player.position}</span>
         <div className="text-right min-w-[90px]">
           <div className="text-green-400 font-bold text-sm">{formatMoney(player[priceField])}</div>
         </div>
-        {isClause && onDirectOffer && (
-          <button
-            onClick={() => onDirectOffer(player)}
-            className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-blue-700 hover:bg-blue-600"
-          >
-            Hacer oferta
-          </button>
+        {isOwn && onOwnAction ? (
+          <>
+            <button onClick={() => onOwnAction(player, 'list')}
+              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-green-700 hover:bg-green-600">
+              Poner en venta
+            </button>
+            <button onClick={() => onOwnAction(player, 'clause')}
+              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-orange-700 hover:bg-orange-600">
+              Subir cláusula
+            </button>
+            <button onClick={() => onOwnAction(player, 'release')}
+              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-red-800 hover:bg-red-700">
+              Liberar
+            </button>
+          </>
+        ) : (
+          <>
+            {isClause && onDirectOffer && (
+              <button onClick={() => onDirectOffer(player)}
+                className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-blue-700 hover:bg-blue-600">
+                Hacer oferta
+              </button>
+            )}
+            {isClause && onSwap && (
+              <button onClick={() => onSwap(player)}
+                className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-purple-700 hover:bg-purple-600">
+                ⇌ Intercambio
+              </button>
+            )}
+            <button onClick={() => onBuy(player)}
+              className={`text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                isClause ? 'bg-orange-600 hover:bg-orange-500' : 'bg-green-500 hover:bg-green-400'
+              }`}>
+              {isClause ? 'Activar cláusula' : 'Comprar'}
+            </button>
+          </>
         )}
-        {isClause && onSwap && (
-          <button
-            onClick={() => onSwap(player)}
-            className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-purple-700 hover:bg-purple-600"
-          >
-            ⇌ Intercambio
-          </button>
-        )}
-        <button
-          onClick={() => onBuy(player)}
-          className={`text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-            isClause
-              ? 'bg-orange-600 hover:bg-orange-500'
-              : 'bg-green-500 hover:bg-green-400'
-          }`}
-        >
-          {isClause ? 'Activar cláusula' : 'Comprar'}
-        </button>
       </div>
     </div>
   )
 }
 
-const EMPTY_FILTERS = { search: '', position: '', ovrMin: '', ovrMax: '', priceMin: '', priceMax: '' }
+function OwnPlayerModal({ action, config, onClose, onSuccess }) {
+  const [amount, setAmount] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState('')
+
+  const { player, type } = action
+  const basePrice       = player.base_price ?? 0
+  const effectiveClause = player.release_clause ?? basePrice
+  const releasePay      = config ? Math.round(basePrice * (config.releasePct ?? 60) / 100) : null
+  const parsedAmt       = parseInt(amount) || 0
+  const clauseCost      = type === 'clause' && parsedAmt > effectiveClause ? parsedAmt - effectiveClause : 0
+
+  const handleSubmit = async () => {
+    setLoading(true); setError('')
+    try {
+      if (type === 'list') {
+        if (!parsedAmt || parsedAmt <= 0) return setError('Precio inválido')
+        if (parsedAmt > effectiveClause) return setError(`No puede superar la cláusula (${formatMoney(effectiveClause)})`)
+        await listPlayer(player.id, parsedAmt)
+        setDone(`${player.name} puesto en venta por ${formatMoney(parsedAmt)}`)
+      } else if (type === 'clause') {
+        if (!parsedAmt || parsedAmt <= effectiveClause) return setError(`El nuevo monto debe superar la cláusula actual (${formatMoney(effectiveClause)})`)
+        await setClause(player.id, parsedAmt)
+        setDone(`Cláusula de ${player.name} subida a ${formatMoney(parsedAmt)}`)
+      } else if (type === 'release') {
+        await releasePlayer(player.id)
+        setDone(`${player.name} liberado`)
+      }
+      onSuccess()
+    } catch (err) { setError(err.response?.data?.error || 'Error') }
+    finally { setLoading(false) }
+  }
+
+  const titles = { list: 'Poner en venta', clause: 'Subir cláusula', release: 'Liberar jugador' }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+      <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-sm border border-gray-700 shadow-2xl space-y-4">
+        <div>
+          <h3 className="text-white text-lg font-bold">{titles[type]}</h3>
+          <p className="text-gray-400 text-sm">{player.name} · <span className={ratingColor(player.rating)}>{player.rating}</span> · {player.position}</p>
+        </div>
+
+        {done ? (
+          <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-green-400 text-sm">{done}</div>
+        ) : (
+          <>
+            <div className="bg-gray-800 rounded-lg px-4 py-2 text-xs text-gray-400 space-y-1">
+              <div className="flex justify-between"><span>Valor base</span><span className="text-white">{formatMoney(basePrice)}</span></div>
+              <div className="flex justify-between"><span>Cláusula actual</span><span className="text-orange-400">{formatMoney(effectiveClause)}</span></div>
+            </div>
+
+            {type === 'list' && (
+              <div className="space-y-2">
+                <label className="text-gray-400 text-xs">Precio de venta (máx. {formatMoney(effectiveClause)})</label>
+                <input type="number" min="1" placeholder="Ingresá el precio..."
+                  value={amount} onChange={e => setAmount(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500" />
+              </div>
+            )}
+
+            {type === 'clause' && (
+              <div className="space-y-2">
+                <label className="text-gray-400 text-xs">Nueva cláusula (mayor a {formatMoney(effectiveClause)})</label>
+                <input type="number" min={effectiveClause + 1} placeholder="Nuevo monto..."
+                  value={amount} onChange={e => setAmount(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500" />
+                {clauseCost > 0 && (
+                  <p className="text-orange-400 text-xs">Pagás la diferencia: <strong>{formatMoney(clauseCost)}</strong></p>
+                )}
+              </div>
+            )}
+
+            {type === 'release' && (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 flex justify-between items-center">
+                <span className="text-green-400 text-sm">Recibís</span>
+                <span className="text-green-400 font-bold text-lg">{releasePay ? formatMoney(releasePay) : '...'}</span>
+              </div>
+            )}
+
+            {error && <p className="text-red-400 text-xs">{error}</p>}
+
+            <div className="flex gap-2">
+              <button onClick={handleSubmit} disabled={loading}
+                className={`flex-1 text-white text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50 ${
+                  type === 'release' ? 'bg-red-600 hover:bg-red-500' :
+                  type === 'clause'  ? 'bg-orange-600 hover:bg-orange-500' :
+                  'bg-green-600 hover:bg-green-500'
+                }`}>
+                {loading ? 'Procesando...' : 'Confirmar'}
+              </button>
+              <button onClick={onClose}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </>
+        )}
+
+        {done && (
+          <button onClick={onClose} className="w-full bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors">
+            Cerrar
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const EMPTY_FILTERS = { search: '', position: '', ovrMin: '', ovrMax: '', priceMin: '', priceMax: '', manager: '' }
 
 const OFFER_STATUS_LABELS = {
   pending:   { label: 'Pendiente',        color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
@@ -318,6 +443,8 @@ export default function Market() {
   const [freePlayers, setFreePlayers] = useState([])
   const [sentOffers, setSentOffers] = useState([])
   const [sentSwaps,  setSentSwaps]  = useState([])
+  const [config,     setConfig]     = useState(null)
+  const [ownAction,  setOwnAction]  = useState(null) // { player, type: 'list'|'clause'|'release' }
   const [loading, setLoading] = useState(true)
   const [confirmPlayer, setConfirmPlayer] = useState(null)
   const [buying, setBuying] = useState(false)
@@ -333,13 +460,14 @@ export default function Market() {
 
   const fetchAll = useCallback(() => {
     setLoading(true)
-    Promise.all([getMarketPlayers(), getClausePlayers(), getFreePlayers(), getSentOffers(), getSentSwaps()])
-      .then(([m, c, f, s, sw]) => {
+    Promise.all([getMarketPlayers(), getClausePlayers(), getFreePlayers(), getSentOffers(), getSentSwaps(), getPublicConfig()])
+      .then(([m, c, f, s, sw, cfg]) => {
         setMarketPlayers(m.data)
         setClausePlayers(c.data)
         setFreePlayers(f.data)
         setSentOffers(s.data)
         setSentSwaps(sw.data)
+        setConfig(cfg.data)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -350,7 +478,7 @@ export default function Market() {
   const setFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: value }))
 
   const applyFilters = (list, priceField) => {
-    const { search, position, ovrMin, ovrMax, priceMin, priceMax } = filters
+    const { search, position, ovrMin, ovrMax, priceMin, priceMax, manager } = filters
     return list.filter(p => {
       if (search) {
         const q = search.toLowerCase()
@@ -366,6 +494,7 @@ export default function Market() {
       const price = p[priceField]
       if (priceMin && price < parseInt(priceMin)) return false
       if (priceMax && price > parseInt(priceMax)) return false
+      if (manager && p.owner_username !== manager) return false
       return true
     })
   }
@@ -586,6 +715,37 @@ export default function Market() {
                 </div>
               </div>
 
+              {/* Manager filter — only in clauses tab */}
+              {isClauseTab && (() => {
+                const managers = [...new Set(clausePlayers.map(p => p.owner_username).filter(Boolean))].sort()
+                if (managers.length === 0) return null
+                return (
+                  <div>
+                    <label className="text-gray-500 text-xs block mb-1.5">Manager</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => setFilter('manager', '')}
+                        className={`px-3 py-1 rounded-lg text-xs border transition-colors ${
+                          !filters.manager ? 'bg-green-500 border-green-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        Todos
+                      </button>
+                      {managers.map(m => (
+                        <button key={m}
+                          onClick={() => setFilter('manager', m)}
+                          className={`px-3 py-1 rounded-lg text-xs border transition-colors ${
+                            filters.manager === m ? 'bg-green-500 border-green-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
               {hasActiveFilters && (
                 <button
                   onClick={() => setFilters(EMPTY_FILTERS)}
@@ -632,8 +792,9 @@ export default function Market() {
                     priceField={priceField}
                     onBuy={setConfirmPlayer}
                     isClause={isClauseTab}
-                    onDirectOffer={isClauseTab ? setDirectOfferPlayer : null}
-                    onSwap={isClauseTab ? setSwapPlayer : null}
+                    onDirectOffer={isClauseTab && !p.is_own ? setDirectOfferPlayer : null}
+                    onSwap={isClauseTab && !p.is_own ? setSwapPlayer : null}
+                    onOwnAction={isClauseTab && p.is_own ? (pl, type) => setOwnAction({ player: pl, type }) : null}
                   />
                 ))}
               </div>
@@ -884,6 +1045,16 @@ export default function Market() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Own player action modal */}
+      {ownAction && (
+        <OwnPlayerModal
+          action={ownAction}
+          config={config}
+          onClose={() => setOwnAction(null)}
+          onSuccess={() => { fetchAll(); refreshUser(); setOwnAction(null) }}
+        />
       )}
     </div>
   )
