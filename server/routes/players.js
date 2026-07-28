@@ -108,7 +108,7 @@ router.get('/clauses', authenticate, async (req, res) => {
       };
     });
 
-    result.sort((a, b) => a.release_clause - b.release_clause);
+    result.sort((a, b) => b.release_clause - a.release_clause);
     res.json(result);
   } catch (err) {
     console.error(err);
