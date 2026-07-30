@@ -248,6 +248,20 @@ export default function Tournaments() {
 
   const selected = tournaments.find(t => t.id === selectedId)
 
+  // Top scorers for the selected tournament (derived from fetched matches)
+  const topScorers = React.useMemo(() => {
+    const acc = {}
+    matches.forEach(m => {
+      if (!m.scorers) return
+      m.scorers.forEach(s => {
+        if (!s.player_id) return
+        if (!acc[s.player_id]) acc[s.player_id] = { name: s.player_name || s.player_id, goals: 0 }
+        acc[s.player_id].goals += s.count || 1
+      })
+    })
+    return Object.values(acc).sort((a, b) => b.goals - a.goals).slice(0, 2)
+  }, [matches])
+
   // Group matches by round_name
   const groupedMatches = matches.reduce((acc, m) => {
     if (!acc[m.round_name]) acc[m.round_name] = []
@@ -306,13 +320,35 @@ export default function Tournaments() {
                 </div>
               )}
 
-              {/* Standings */}
+              {/* Standings + top scorers row */}
               {selected.participants?.length > 0 && matches.length > 0 && (
-                <div className="bg-gray-900 rounded-xl border border-gray-800">
-                  <div className="px-4 py-3 border-b border-gray-800">
-                    <h3 className="text-white font-semibold text-sm">Tabla de posiciones</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                  <div className="md:col-span-2 bg-gray-900 rounded-xl border border-gray-800">
+                    <div className="px-4 py-3 border-b border-gray-800">
+                      <h3 className="text-white font-semibold text-sm">Tabla de posiciones</h3>
+                    </div>
+                    <StandingsTable matches={matches} participants={selected.participants} />
                   </div>
-                  <StandingsTable matches={matches} participants={selected.participants} />
+
+                  {/* Top 2 scorers */}
+                  {topScorers.length > 0 && (
+                    <div className="bg-gray-900 rounded-xl border border-gray-800">
+                      <div className="px-4 py-3 border-b border-gray-800">
+                        <h3 className="text-white font-semibold text-sm">Goleadores</h3>
+                      </div>
+                      <div className="divide-y divide-gray-800/50">
+                        {topScorers.map((s, i) => (
+                          <div key={s.name} className="px-4 py-3 flex items-center gap-3">
+                            <span className={`text-lg font-bold w-6 text-center ${i === 0 ? 'text-yellow-400' : 'text-gray-500'}`}>
+                              {i === 0 ? '🥇' : '🥈'}
+                            </span>
+                            <span className="flex-1 text-white text-sm font-medium truncate">{s.name}</span>
+                            <span className="text-green-400 font-bold text-lg">{s.goals}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

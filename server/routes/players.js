@@ -554,19 +554,60 @@ router.get('/:id/profile', async (req, res) => {
       [playerId]
     );
 
-    const { rows: matches } = await pool.query(
-      'SELECT scorers FROM matches WHERE scorers IS NOT NULL'
-    );
+    const [{ rows: scoredMatches }, { rows: ownershipHistory }] = await Promise.all([
+      pool.query(`
+        SELECT m.scorers, m.played_at, t.id as tournament_id, t.name as tournament_name
+        FROM matches m
+        LEFT JOIN tournaments t ON m.tournament_id = t.id
+        WHERE m.scorers IS NOT NULL
+        ORDER BY m.played_at ASC
+      `),
+      // All transfers where this player changed hands, sorted ascending (oldest first)
+      pool.query(
+        `SELECT to_username, created_at FROM transfers
+         WHERE player_id = $1 AND to_user_id IS NOT NULL
+         ORDER BY created_at ASC`,
+        [playerId]
+      ),
+    ]);
+
     let goals = 0;
-    for (const m of matches) {
-      try {
-        const scorers = JSON.parse(m.scorers);
-        const entry = scorers.find(s => s.player_id === playerId);
-        if (entry) goals += entry.count || 1;
-      } catch {}
+    const byTeam = {};        // { [username]: count }
+    const byTournament = {};  // { [tournament_id]: { name, goals } }
+
+    for (const m of scoredMatches) {
+      let sc;
+      try { sc = JSON.parse(m.scorers); } catch { continue; }
+      const entry = sc.find(s => s.player_id === playerId);
+      if (!entry) continue;
+
+      const count = entry.count || 1;
+      goals += count;
+
+      // Determine owner at the time of the match (latest transfer before played_at)
+      let team = 'Sin dueño';
+      for (const t of ownershipHistory) {
+        if (t.created_at <= m.played_at) team = t.to_username;
+        else break;
+      }
+      byTeam[team] = (byTeam[team] || 0) + count;
+
+      // By tournament
+      if (m.tournament_id) {
+        const key = m.tournament_id;
+        if (!byTournament[key]) byTournament[key] = { name: m.tournament_name || `Torneo ${key}`, goals: 0 };
+        byTournament[key].goals += count;
+      }
     }
 
-    res.json({ player: rows[0], history, goals });
+    const goals_by_team = Object.entries(byTeam)
+      .map(([team, g]) => ({ team, goals: g }))
+      .sort((a, b) => b.goals - a.goals);
+
+    const goals_by_tournament = Object.values(byTournament)
+      .sort((a, b) => b.goals - a.goals);
+
+    res.json({ player: rows[0], history, goals, goals_by_team, goals_by_tournament });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });

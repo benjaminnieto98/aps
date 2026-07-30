@@ -49,7 +49,7 @@ export default function PlayerProfile() {
     </div>
   )
 
-  const { player, history, goals } = data
+  const { player, history, goals, goals_by_team = [], goals_by_tournament = [] } = data
   const posColor = POS_COLORS[player.position] || 'bg-gray-700 text-gray-300'
   const canPropose = user && player.owner_id && player.owner_id !== user.id
 
@@ -117,6 +117,58 @@ export default function PlayerProfile() {
           </div>
         )}
       </div>
+
+      {/* Goals breakdown */}
+      {goals > 0 && (
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-800">
+            <h2 className="text-white font-semibold">Goles</h2>
+          </div>
+          <div className="p-4 space-y-4">
+            {/* By team */}
+            {goals_by_team.length > 0 && (
+              <div>
+                <p className="text-gray-500 text-xs uppercase tracking-wider mb-2">Por equipo</p>
+                <div className="space-y-1.5">
+                  {goals_by_team.map(({ team, goals: g }) => (
+                    <div key={team} className="flex items-center gap-3">
+                      <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden h-6 relative">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-green-500/30 rounded-lg"
+                          style={{ width: `${Math.round((g / goals) * 100)}%` }}
+                        />
+                        <span className="absolute inset-0 flex items-center px-2.5 text-xs text-gray-300">{team}</span>
+                      </div>
+                      <span className="text-green-400 font-bold text-sm w-6 text-right">{g}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* By tournament */}
+            {goals_by_tournament.length > 0 && (
+              <div>
+                <p className="text-gray-500 text-xs uppercase tracking-wider mb-2">Por torneo</p>
+                <div className="space-y-1.5">
+                  {goals_by_tournament.map(({ name, goals: g }) => (
+                    <div key={name} className="flex items-center gap-3">
+                      <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden h-6 relative">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-blue-500/30 rounded-lg"
+                          style={{ width: `${Math.round((g / goals) * 100)}%` }}
+                        />
+                        <span className="absolute inset-0 flex items-center px-2.5 text-xs text-gray-300">{name}</span>
+                      </div>
+                      <span className="text-blue-400 font-bold text-sm w-6 text-right">{g}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Transfer history */}
       <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
