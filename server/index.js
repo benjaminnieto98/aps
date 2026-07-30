@@ -261,7 +261,7 @@ app.get('/api/stats/records', async (req, res) => {
          ) t GROUP BY username ORDER BY ops DESC LIMIT 5`
       ).then(r => r.rows),
 
-      // Mayor goleada (mayor diferencia de goles)
+      // Mayor goleada (mayor diferencia de goles) — solo liga
       pool.query(
         `SELECT m.id, m.home_score, m.away_score,
                 ABS(m.home_score - m.away_score) as diff,
@@ -273,10 +273,11 @@ app.get('/api/stats/records', async (req, res) => {
          JOIN users ua ON m.away_id = ua.id
          LEFT JOIN tournaments t ON m.tournament_id = t.id
          WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+           AND (m.phase IS NULL OR m.phase NOT IN ('copa_semi','copa_final','supercopa_semi','supercopa_final','friendly'))
          ORDER BY diff DESC, (m.home_score + m.away_score) DESC LIMIT 1`
       ).then(r => r.rows[0] || null),
 
-      // Partido más goleador (más goles en total)
+      // Partido más goleador (más goles en total) — solo liga
       pool.query(
         `SELECT m.id, m.home_score, m.away_score,
                 (m.home_score + m.away_score) as total_goals,
@@ -288,10 +289,11 @@ app.get('/api/stats/records', async (req, res) => {
          JOIN users ua ON m.away_id = ua.id
          LEFT JOIN tournaments t ON m.tournament_id = t.id
          WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+           AND (m.phase IS NULL OR m.phase NOT IN ('copa_semi','copa_final','supercopa_semi','supercopa_final','friendly'))
          ORDER BY total_goals DESC LIMIT 1`
       ).then(r => r.rows[0] || null),
 
-      // Equipo más goleador en un torneo
+      // Equipo más goleador en un torneo — solo liga
       pool.query(
         `SELECT t.name as tournament_name, u.username, u.team_name,
                 SUM(CASE WHEN m.home_id = u.id THEN m.home_score ELSE m.away_score END)::int as goals
@@ -299,16 +301,18 @@ app.get('/api/stats/records', async (req, res) => {
          JOIN tournaments t ON m.tournament_id = t.id
          JOIN users u ON (m.home_id = u.id OR m.away_id = u.id)
          WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL AND m.tournament_id IS NOT NULL
+           AND (m.phase IS NULL OR m.phase NOT IN ('copa_semi','copa_final','supercopa_semi','supercopa_final','friendly'))
          GROUP BY t.id, t.name, u.id, u.username, u.team_name
          ORDER BY goals DESC LIMIT 1`
       ).then(r => r.rows[0] || null),
 
-      // Scored matches for per-tournament player scorer calc
+      // Scored matches for per-tournament player scorer calc — solo liga
       pool.query(
         `SELECT m.scorers, m.tournament_id, t.name as tournament_name
          FROM matches m
          LEFT JOIN tournaments t ON m.tournament_id = t.id
-         WHERE m.scorers IS NOT NULL AND m.tournament_id IS NOT NULL`
+         WHERE m.scorers IS NOT NULL AND m.tournament_id IS NOT NULL
+           AND (m.phase IS NULL OR m.phase NOT IN ('copa_semi','copa_final','supercopa_semi','supercopa_final','friendly'))`
       ),
     ]);
 
@@ -320,10 +324,11 @@ app.get('/api/stats/records', async (req, res) => {
       matchStats[u.id] = { ...u, wins: 0, losses: 0, draws: 0, clean_sheets: 0, gf: 0, ga: 0, streak_wins: 0, streak_draws: 0 };
     }
 
-    // We need ordered matches to compute current streaks
+    // We need ordered matches to compute current streaks — solo liga (sin copa/supercopa/friendly)
     const { rows: orderedMatches } = await pool.query(
       `SELECT home_id, away_id, home_score, away_score, played_at, id
        FROM matches WHERE home_score IS NOT NULL AND away_score IS NOT NULL
+         AND (phase IS NULL OR phase NOT IN ('copa_semi','copa_final','supercopa_semi','supercopa_final','friendly'))
        ORDER BY played_at ASC NULLS FIRST, id ASC`
     );
 
