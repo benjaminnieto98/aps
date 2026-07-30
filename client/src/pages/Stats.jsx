@@ -387,121 +387,173 @@ export default function Stats() {
 
       {/* Records */}
       {tab === 'records' && (
-        <div className="space-y-4">
-          {/* Transferencia más cara */}
-          {records?.biggestTransfer ? (
-            <RecordCard label="Transferencia más cara" accent="yellow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div
-                    className="text-white font-bold text-lg cursor-pointer hover:text-green-400 transition-colors"
-                    onClick={() => records.biggestTransfer.player_id && navigate(`/player/${records.biggestTransfer.player_id}`)}
-                  >
-                    {records.biggestTransfer.player_name}
-                  </div>
-                  <div className="text-gray-400 text-sm mt-0.5">
-                    <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded mr-2">{records.biggestTransfer.player_position}</span>
-                    {records.biggestTransfer.from_username
-                      ? <>{records.biggestTransfer.from_username} → {records.biggestTransfer.to_username}</>
-                      : <>Agente libre → {records.biggestTransfer.to_username}</>
-                    }
-                  </div>
-                </div>
-                <div className="text-yellow-400 font-bold text-xl">{formatMoney(records.biggestTransfer.price)}</div>
-              </div>
-            </RecordCard>
-          ) : (
-            <RecordCard label="Transferencia más cara" accent="yellow">
-              <div className="text-gray-600 italic text-sm">Sin traspasos registrados</div>
-            </RecordCard>
-          )}
+        <div className="space-y-8">
 
-          {/* Goleadas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <MatchRecordCard label="Mayor goleada" data={records?.biggestWin} accent="orange" />
-            <MatchRecordCard label="Partido más goleador" data={records?.mostGoalsMatch} accent="blue" />
-          </div>
+          {/* ── Partidos ── */}
+          <section className="space-y-3">
+            <h2 className="text-gray-500 text-xs font-semibold uppercase tracking-widest border-b border-gray-800 pb-2">Partidos</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <MatchRecordCard label="Mayor goleada" data={records?.biggestWin} accent="orange" />
+              <MatchRecordCard label="Partido más goleador" data={records?.mostGoalsMatch} accent="blue" />
+            </div>
+          </section>
 
-          {/* Racha ganadora */}
-          {records?.longestStreak && (
-            <RecordCard label="Racha ganadora más larga" accent="green">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-white font-bold text-lg">{records.longestStreak.team_name || records.longestStreak.username}</div>
-                  <div className="text-gray-500 text-xs">{records.longestStreak.username}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-green-400 font-black text-3xl">{records.longestStreak.longest_win_streak}</div>
-                  <div className="text-gray-500 text-xs">victorias seguidas</div>
-                </div>
-              </div>
-            </RecordCard>
-          )}
-
-          {/* Jugador más transferido */}
-          {records?.mostTransferred && (
-            <RecordCard label="Jugador más traspasado" accent="blue">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-white font-bold">{records.mostTransferred.player_name}</div>
-                  <div className="text-gray-400 text-sm">
-                    <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded mr-1">
-                      {records.mostTransferred.player_position}
-                    </span>
-                    OVR {records.mostTransferred.player_rating}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-blue-400 font-bold text-2xl">{records.mostTransferred.times}</span>
-                  <span className="text-gray-500 text-xs ml-1">veces</span>
-                </div>
-              </div>
-            </RecordCard>
-          )}
-
-          {/* Rankings W/D/L + clean sheets */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <RecordCard label="Más victorias" accent="green">
-              <MiniRanking items={records?.mostWins} valueKey="wins" accent="green" format="number" />
-            </RecordCard>
-            <RecordCard label="Más derrotas" accent="red">
-              <MiniRanking items={records?.mostLosses} valueKey="losses" accent="red" format="number" />
-            </RecordCard>
-            <RecordCard label="Rey del empate" accent="cyan">
-              <MiniRanking items={records?.mostDraws} valueKey="draws" accent="cyan" format="number" />
-            </RecordCard>
-            <RecordCard label="Portería menos batida" accent="purple">
-              <MiniRanking items={records?.cleanSheets} valueKey="clean_sheets" accent="purple" format="number" />
-            </RecordCard>
-          </div>
-
-          {/* Transferencias */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <RecordCard label="Top gastadores" accent="orange">
-              <MiniRanking items={records?.topSpenders} valueKey="total" accent="orange" />
-            </RecordCard>
-            <RecordCard label="Top recaudadores" accent="green">
-              <MiniRanking items={records?.topEarners} valueKey="total" accent="green" />
-            </RecordCard>
-          </div>
-
-          <RecordCard label="Managers más activos en el mercado" accent="purple">
-            {records?.mostActive?.length > 0 ? (
-              <div className="space-y-2">
-                {records.mostActive.map((m, i) => (
-                  <div key={m.username} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{['🥇','🥈','🥉'][i] || <span className="text-gray-500 text-xs">{i+1}</span>}</span>
-                      <span className="text-white text-sm">{m.username}</span>
+          {/* ── Goles ── */}
+          <section className="space-y-3">
+            <h2 className="text-gray-500 text-xs font-semibold uppercase tracking-widest border-b border-gray-800 pb-2">Goles</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Goleador máximo en un torneo */}
+              <RecordCard label="Máximo goleador en un torneo" accent="green">
+                {records?.topScorerByTournament ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-white font-bold text-base truncate">{records.topScorerByTournament.player_name}</div>
+                      <div className="text-gray-500 text-xs mt-0.5 truncate">{records.topScorerByTournament.tournament_name}</div>
                     </div>
-                    <span className="text-purple-400 font-bold text-sm">{m.ops} operaciones</span>
+                    <div className="text-right shrink-0">
+                      <div className="text-green-400 font-black text-3xl">{records.topScorerByTournament.goals}</div>
+                      <div className="text-gray-500 text-xs">goles</div>
+                    </div>
                   </div>
-                ))}
-              </div>
+                ) : <div className="text-gray-600 italic text-sm">Sin datos</div>}
+              </RecordCard>
+
+              {/* Equipo más goleador en un torneo */}
+              <RecordCard label="Equipo más goleador en un torneo" accent="yellow">
+                {records?.topTeamByTournament ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-white font-bold text-base truncate">{records.topTeamByTournament.team_name || records.topTeamByTournament.username}</div>
+                      <div className="text-gray-500 text-xs mt-0.5 truncate">{records.topTeamByTournament.tournament_name}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-yellow-400 font-black text-3xl">{records.topTeamByTournament.goals}</div>
+                      <div className="text-gray-500 text-xs">goles</div>
+                    </div>
+                  </div>
+                ) : <div className="text-gray-600 italic text-sm">Sin datos</div>}
+              </RecordCard>
+            </div>
+          </section>
+
+          {/* ── Equipos ── */}
+          <section className="space-y-3">
+            <h2 className="text-gray-500 text-xs font-semibold uppercase tracking-widest border-b border-gray-800 pb-2">Equipos</h2>
+
+            {/* Racha + jugador más transferido */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {records?.longestStreak && (
+                <RecordCard label="Racha ganadora más larga" accent="green">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-white font-bold">{records.longestStreak.team_name || records.longestStreak.username}</div>
+                      <div className="text-gray-500 text-xs">{records.longestStreak.username}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-green-400 font-black text-3xl">{records.longestStreak.longest_win_streak}</div>
+                      <div className="text-gray-500 text-xs">victorias seguidas</div>
+                    </div>
+                  </div>
+                </RecordCard>
+              )}
+              {records?.mostTransferred && (
+                <RecordCard label="Jugador más traspasado" accent="blue">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-white font-bold">{records.mostTransferred.player_name}</div>
+                      <div className="text-gray-400 text-sm">
+                        <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded mr-1">{records.mostTransferred.player_position}</span>
+                        OVR {records.mostTransferred.player_rating}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-blue-400 font-bold text-2xl">{records.mostTransferred.times}</span>
+                      <span className="text-gray-500 text-xs ml-1">veces</span>
+                    </div>
+                  </div>
+                </RecordCard>
+              )}
+            </div>
+
+            {/* W/D/L + ataque/defensa/clean sheets */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <RecordCard label="Más victorias" accent="green">
+                <MiniRanking items={records?.mostWins} valueKey="wins" accent="green" format="number" />
+              </RecordCard>
+              <RecordCard label="Más derrotas" accent="red">
+                <MiniRanking items={records?.mostLosses} valueKey="losses" accent="red" format="number" />
+              </RecordCard>
+              <RecordCard label="Rey del empate" accent="cyan">
+                <MiniRanking items={records?.mostDraws} valueKey="draws" accent="cyan" format="number" />
+              </RecordCard>
+              <RecordCard label="Portería menos batida" accent="purple">
+                <MiniRanking items={records?.cleanSheets} valueKey="clean_sheets" accent="purple" format="number" />
+              </RecordCard>
+              <RecordCard label="Mejor ataque (GF histórico)" accent="orange">
+                <MiniRanking items={records?.bestAttack} valueKey="total" accent="orange" format="number" />
+              </RecordCard>
+              <RecordCard label="Mejor defensa (GA histórico)" accent="cyan">
+                <MiniRanking items={records?.bestDefense} valueKey="total" accent="cyan" format="number" />
+              </RecordCard>
+            </div>
+          </section>
+
+          {/* ── Mercado ── */}
+          <section className="space-y-3">
+            <h2 className="text-gray-500 text-xs font-semibold uppercase tracking-widest border-b border-gray-800 pb-2">Mercado</h2>
+
+            {records?.biggestTransfer ? (
+              <RecordCard label="Transferencia más cara" accent="yellow">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-white font-bold text-lg cursor-pointer hover:text-green-400 transition-colors"
+                      onClick={() => records.biggestTransfer.player_id && navigate(`/player/${records.biggestTransfer.player_id}`)}>
+                      {records.biggestTransfer.player_name}
+                    </div>
+                    <div className="text-gray-400 text-sm mt-0.5">
+                      <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded mr-2">{records.biggestTransfer.player_position}</span>
+                      {records.biggestTransfer.from_username
+                        ? <>{records.biggestTransfer.from_username} → {records.biggestTransfer.to_username}</>
+                        : <>Agente libre → {records.biggestTransfer.to_username}</>}
+                    </div>
+                  </div>
+                  <div className="text-yellow-400 font-bold text-xl">{formatMoney(records.biggestTransfer.price)}</div>
+                </div>
+              </RecordCard>
             ) : (
-              <div className="text-gray-600 italic text-sm">Sin actividad registrada</div>
+              <RecordCard label="Transferencia más cara" accent="yellow">
+                <div className="text-gray-600 italic text-sm">Sin traspasos registrados</div>
+              </RecordCard>
             )}
-          </RecordCard>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <RecordCard label="Top gastadores" accent="orange">
+                <MiniRanking items={records?.topSpenders} valueKey="total" accent="orange" />
+              </RecordCard>
+              <RecordCard label="Top recaudadores" accent="green">
+                <MiniRanking items={records?.topEarners} valueKey="total" accent="green" />
+              </RecordCard>
+            </div>
+
+            <RecordCard label="Managers más activos en el mercado" accent="purple">
+              {records?.mostActive?.length > 0 ? (
+                <div className="space-y-2">
+                  {records.mostActive.map((m, i) => (
+                    <div key={m.username} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{['🥇','🥈','🥉'][i] || <span className="text-gray-500 text-xs">{i+1}</span>}</span>
+                        <span className="text-white text-sm">{m.username}</span>
+                      </div>
+                      <span className="text-purple-400 font-bold text-sm">{m.ops} operaciones</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-gray-600 italic text-sm">Sin actividad registrada</div>
+              )}
+            </RecordCard>
+          </section>
+
         </div>
       )}
     </div>

@@ -223,7 +223,7 @@ app.get('/api/stats/records', async (req, res) => {
   try {
     const [
       biggestTransfer, topSpenders, topEarners, mostTransferred, mostActive,
-      biggestWin, mostGoalsMatch
+      biggestWin, mostGoalsMatch, topTeamByTournament, allScoredMatchesRes
     ] = await Promise.all([
       // Traspaso más caro
       pool.query(
@@ -290,6 +290,26 @@ app.get('/api/stats/records', async (req, res) => {
          WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL
          ORDER BY total_goals DESC LIMIT 1`
       ).then(r => r.rows[0] || null),
+
+      // Equipo más goleador en un torneo
+      pool.query(
+        `SELECT t.name as tournament_name, u.username, u.team_name,
+                SUM(CASE WHEN m.home_id = u.id THEN m.home_score ELSE m.away_score END)::int as goals
+         FROM matches m
+         JOIN tournaments t ON m.tournament_id = t.id
+         JOIN users u ON (m.home_id = u.id OR m.away_id = u.id)
+         WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL AND m.tournament_id IS NOT NULL
+         GROUP BY t.id, t.name, u.id, u.username, u.team_name
+         ORDER BY goals DESC LIMIT 1`
+      ).then(r => r.rows[0] || null),
+
+      // Scored matches for per-tournament player scorer calc
+      pool.query(
+        `SELECT m.scorers, m.tournament_id, t.name as tournament_name
+         FROM matches m
+         LEFT JOIN tournaments t ON m.tournament_id = t.id
+         WHERE m.scorers IS NOT NULL AND m.tournament_id IS NOT NULL`
+      ),
     ]);
 
     // Win/draw/loss/clean sheet stats per user (from finished matches)
@@ -346,11 +366,34 @@ app.get('/api/stats/records', async (req, res) => {
     const mostDraws   = [...userList].sort((a,b) => b.draws - a.draws).slice(0,5);
     const cleanSheets = [...userList].sort((a,b) => b.clean_sheets - a.clean_sheets).slice(0,5);
     const longestStreak = [...userList].sort((a,b) => b.longest_win_streak - a.longest_win_streak).slice(0,1)[0] || null;
+    const bestAttack  = [...userList].sort((a,b) => b.gf - a.gf).slice(0,5).map(u => ({ ...u, total: u.gf }));
+    const bestDefense = [...userList].filter(u => u.wins + u.draws + u.losses >= 3).sort((a,b) => a.ga - b.ga).slice(0,5).map(u => ({ ...u, total: u.ga }));
+
+    // Top goleador en un torneo (JS, scorers stored as JSON)
+    const goalsByTournamentPlayer = {};
+    for (const m of allScoredMatchesRes.rows) {
+      let sc; try { sc = JSON.parse(m.scorers); } catch { continue; }
+      for (const s of sc) {
+        const key = `${m.tournament_id}:${s.player_id}`;
+        if (!goalsByTournamentPlayer[key]) goalsByTournamentPlayer[key] = { tournament_name: m.tournament_name, player_id: s.player_id, goals: 0 };
+        goalsByTournamentPlayer[key].goals += s.count || 1;
+      }
+    }
+    let topScorerByTournament = null;
+    for (const entry of Object.values(goalsByTournamentPlayer)) {
+      if (!topScorerByTournament || entry.goals > topScorerByTournament.goals) topScorerByTournament = entry;
+    }
+    if (topScorerByTournament) {
+      const { rows: pRows } = await pool.query('SELECT name, position FROM players WHERE id = $1', [topScorerByTournament.player_id]);
+      if (pRows[0]) { topScorerByTournament.player_name = pRows[0].name; topScorerByTournament.player_position = pRows[0].position; }
+    }
 
     res.json({
       biggestTransfer, topSpenders, topEarners, mostTransferred, mostActive,
       biggestWin, mostGoalsMatch,
-      mostWins, mostLosses, mostDraws, cleanSheets, longestStreak
+      mostWins, mostLosses, mostDraws, cleanSheets, longestStreak,
+      bestAttack, bestDefense,
+      topScorerByTournament, topTeamByTournament,
     });
   } catch (err) {
     console.error(err);
