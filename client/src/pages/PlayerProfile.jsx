@@ -146,26 +146,6 @@ export default function PlayerProfile() {
               </div>
             )}
 
-            {/* By tournament */}
-            {goals_by_tournament.length > 0 && (
-              <div>
-                <p className="text-gray-500 text-xs uppercase tracking-wider mb-2">Por torneo</p>
-                <div className="space-y-1.5">
-                  {goals_by_tournament.map(({ name, goals: g }) => (
-                    <div key={name} className="flex items-center gap-3">
-                      <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden h-6 relative">
-                        <div
-                          className="absolute inset-y-0 left-0 bg-blue-500/30 rounded-lg"
-                          style={{ width: `${Math.round((g / goals) * 100)}%` }}
-                        />
-                        <span className="absolute inset-0 flex items-center px-2.5 text-xs text-gray-300">{name}</span>
-                      </div>
-                      <span className="text-blue-400 font-bold text-sm w-6 text-right">{g}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

@@ -259,7 +259,7 @@ export default function Tournaments() {
         acc[s.player_id].goals += s.count || 1
       })
     })
-    return Object.values(acc).sort((a, b) => b.goals - a.goals).slice(0, 2)
+    return Object.values(acc).sort((a, b) => b.goals - a.goals).slice(0, 3)
   }, [matches])
 
   // Group matches by round_name
@@ -339,8 +339,8 @@ export default function Tournaments() {
                       <div className="divide-y divide-gray-800/50">
                         {topScorers.map((s, i) => (
                           <div key={s.name} className="px-4 py-3 flex items-center gap-3">
-                            <span className={`text-lg font-bold w-6 text-center ${i === 0 ? 'text-yellow-400' : 'text-gray-500'}`}>
-                              {i === 0 ? '🥇' : '🥈'}
+                            <span className="text-lg w-6 text-center">
+                              {['🥇', '🥈', '🥉'][i]}
                             </span>
                             <span className="flex-1 text-white text-sm font-medium truncate">{s.name}</span>
                             <span className="text-green-400 font-bold text-lg">{s.goals}</span>
