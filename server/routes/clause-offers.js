@@ -120,15 +120,18 @@ router.post('/:id/accept', authenticate, async (req, res) => {
     const nextOverride = Math.round(offer.clause_amount * 1.1);
 
     await withTransaction(async (client) => {
+      // Claim the offer atomically — prevents double-execution on rapid double-click
+      const { rows: claimed } = await client.query(
+        "UPDATE clause_offers SET status = 'accepted', resolved_at = $1 WHERE id = $2 AND status = 'pending' RETURNING id",
+        [now, offerId]
+      );
+      if (claimed.length === 0) throw Object.assign(new Error('La oferta ya fue procesada'), { status: 409 });
+
       await client.query('UPDATE users SET budget = budget - $1 WHERE id = $2', [offer.clause_amount, buyer.id]);
       await client.query('UPDATE users SET budget = budget + $1 WHERE id = $2', [offer.clause_amount, req.user.id]);
       await client.query(
         'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1, price_override = $3 WHERE id = $2',
         [buyer.id, offer.player_id, nextOverride]
-      );
-      await client.query(
-        "UPDATE clause_offers SET status = 'accepted', resolved_at = $1 WHERE id = $2",
-        [now, offerId]
       );
       await client.query(
         "UPDATE clause_offers SET status = 'rejected', resolved_at = $1 WHERE player_id = $2 AND id != $3 AND status = 'pending'",
@@ -139,6 +142,7 @@ router.post('/:id/accept', authenticate, async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
+    if (err.status === 409) return res.status(409).json({ error: err.message });
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });
   }
@@ -278,21 +282,25 @@ router.post('/:id/accept-raised', authenticate, async (req, res) => {
     const nextOverride = Math.round(offer.new_clause_amount * 1.1);
 
     await withTransaction(async (client) => {
+      // Claim the offer atomically — prevents double-execution on rapid double-click
+      const { rows: claimed } = await client.query(
+        "UPDATE clause_offers SET status = 'accepted', resolved_at = $1 WHERE id = $2 AND status = 'raised' RETURNING id",
+        [now, offerId]
+      );
+      if (claimed.length === 0) throw Object.assign(new Error('La oferta ya fue procesada'), { status: 409 });
+
       await client.query('UPDATE users SET budget = budget - $1 WHERE id = $2', [offer.new_clause_amount, req.user.id]);
       await client.query('UPDATE users SET budget = budget + $1 WHERE id = $2', [offer.new_clause_amount, offer.owner_id]);
       await client.query(
         'UPDATE players SET owner_id = $1, listed_price = NULL, release_clause = NULL, purchase_count = purchase_count + 1, price_override = $3 WHERE id = $2',
         [req.user.id, offer.player_id, nextOverride]
       );
-      await client.query(
-        "UPDATE clause_offers SET status = 'accepted', resolved_at = $1 WHERE id = $2",
-        [now, offerId]
-      );
       await logTransfer({ type: 'compra', player, from: owner, to: buyer, price: offer.new_clause_amount, _client: client });
     });
 
     res.json({ success: true, price: offer.new_clause_amount });
   } catch (err) {
+    if (err.status === 409) return res.status(409).json({ error: err.message });
     console.error(err);
     res.status(500).json({ error: 'Error del servidor' });
   }
