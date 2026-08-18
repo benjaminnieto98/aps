@@ -233,14 +233,14 @@ app.get('/api/stats/records', async (req, res) => {
 
       // Top gastadores
       pool.query(
-        `SELECT to_username as username, SUM(price)::int as total FROM transfers
+        `SELECT to_username as username, SUM(price)::bigint as total FROM transfers
          WHERE type='compra' AND price IS NOT NULL AND to_username IS NOT NULL
          GROUP BY to_username ORDER BY total DESC LIMIT 5`
       ).then(r => r.rows),
 
       // Top vendedores
       pool.query(
-        `SELECT from_username as username, SUM(price)::int as total FROM transfers
+        `SELECT from_username as username, SUM(price)::bigint as total FROM transfers
          WHERE type='compra' AND price IS NOT NULL AND from_username IS NOT NULL
          GROUP BY from_username ORDER BY total DESC LIMIT 5`
       ).then(r => r.rows),
@@ -294,7 +294,7 @@ app.get('/api/stats/records', async (req, res) => {
       // Equipo más goleador en un torneo — solo liga
       pool.query(
         `SELECT t.name as tournament_name, u.username, u.team_name,
-                SUM(CASE WHEN m.home_id = u.id THEN m.home_score ELSE m.away_score END)::int as goals
+                SUM(CASE WHEN m.home_id = u.id THEN m.home_score ELSE m.away_score END) as goals
          FROM matches m
          JOIN tournaments t ON m.tournament_id = t.id
          JOIN users u ON (m.home_id = u.id OR m.away_id = u.id)
