@@ -236,13 +236,15 @@ export default function Stats() {
   const [tab, setTab] = useState('scorers')
 
   useEffect(() => {
-    Promise.all([getScorers(), getManagers(), getRecords()])
+    Promise.allSettled([getScorers(), getManagers(), getRecords()])
       .then(([sRes, mRes, rRes]) => {
-        setScorers(sRes.data)
-        setManagers(mRes.data)
-        setRecords(rRes.data)
+        if (sRes.status === 'fulfilled') setScorers(sRes.value.data)
+        else console.error('scorers:', sRes.reason)
+        if (mRes.status === 'fulfilled') setManagers(mRes.value.data)
+        else console.error('managers:', mRes.reason)
+        if (rRes.status === 'fulfilled') setRecords(rRes.value.data)
+        else console.error('records:', rRes.reason)
       })
-      .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
 

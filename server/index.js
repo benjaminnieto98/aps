@@ -376,6 +376,7 @@ app.get('/api/stats/records', async (req, res) => {
     for (const m of allScoredMatchesRes.rows) {
       let sc; try { sc = JSON.parse(m.scorers); } catch { continue; }
       for (const s of sc) {
+        if (!s.player_id) continue;
         const key = `${m.tournament_id}:${s.player_id}`;
         if (!goalsByTournamentPlayer[key]) goalsByTournamentPlayer[key] = { tournament_name: m.tournament_name, player_id: s.player_id, goals: 0 };
         goalsByTournamentPlayer[key].goals += s.count || 1;
