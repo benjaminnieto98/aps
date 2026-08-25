@@ -22,6 +22,11 @@ function PlayerRow({ player, priceField, onBuy, isClause, onDirectOffer, onSwap,
         <div className="flex items-center gap-2">
           <span className="text-white font-medium text-sm">{player.name}</span>
           {isOwn && <span className="text-blue-400 text-xs bg-blue-400/10 border border-blue-400/30 px-1.5 py-0.5 rounded">Mi jugador</span>}
+          {player.raised_count > 0 && (
+            <span className="text-orange-400 text-xs bg-orange-400/10 border border-orange-400/30 px-1.5 py-0.5 rounded" title={`Cláusula subida ${player.raised_count} ${player.raised_count === 1 ? 'vez' : 'veces'}`}>
+              📈{player.raised_count > 1 ? `×${player.raised_count}` : ''}
+            </span>
+          )}
         </div>
         <div className="text-gray-500 text-xs">{player.nationality} · {player.pes_team}</div>
         {player.owner_username && !isOwn && (

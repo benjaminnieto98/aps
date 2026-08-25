@@ -192,7 +192,11 @@ router.post('/:id/raise', authenticate, async (req, res) => {
 
     await withTransaction(async (client) => {
       await client.query('UPDATE users SET budget = budget - $1 WHERE id = $2', [diff, req.user.id]);
-      await client.query('UPDATE players SET release_clause = $1 WHERE id = $2', [newAmt, offer.player_id]);
+      // Raise also anchors the base value (price_override) so the boost persists through swaps
+      await client.query(
+        'UPDATE players SET release_clause = $1, price_override = $1, raised_count = COALESCE(raised_count, 0) + 1 WHERE id = $2',
+        [newAmt, offer.player_id]
+      );
       await client.query(
         "UPDATE clause_offers SET status = 'raised', new_clause_amount = $1, resolved_at = $2 WHERE id = $3",
         [newAmt, now, offerId]
