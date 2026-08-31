@@ -611,7 +611,7 @@ app.get('/api/feed', async (req, res) => {
 
     if (transfersRes.status === 'fulfilled') {
       for (const r of transfersRes.value.rows) {
-        items.push({ type: r.type === 'compra' ? 'buy' : 'release', ...r });
+        items.push({ ...r, type: r.type === 'compra' ? 'buy' : 'release' });
       }
     }
     if (swapsRes.status === 'fulfilled') {
