@@ -555,6 +555,92 @@ app.get('/api/stats/h2h', async (req, res) => {
   }
 });
 
+// ─── GET /api/feed — activity feed (last 5 days) ─────────────────────────────
+app.get('/api/feed', async (req, res) => {
+  const since = Date.now() - 5 * 24 * 60 * 60 * 1000;
+
+  try {
+    const [transfersRes, swapsRes, matchesRes, raisedRes] = await Promise.allSettled([
+      // Compras y liberaciones
+      pool.query(`
+        SELECT type, player_name, player_rating, player_position,
+               from_username, to_username, price, created_at AS ts
+        FROM transfers
+        WHERE created_at > $1 AND type IN ('compra', 'liberacion')
+        ORDER BY created_at DESC
+        LIMIT 60
+      `, [since]),
+
+      // Intercambios (via swap_offers para no duplicar las 2 filas de transfers)
+      pool.query(`
+        SELECT proposer_username, offered_player_name, offered_player_rating, offered_player_position,
+               receiver_username, requested_player_name, requested_player_rating, requested_player_position,
+               cash_difference, resolved_at AS ts
+        FROM swap_offers
+        WHERE status = 'accepted' AND resolved_at > $1
+        ORDER BY resolved_at DESC
+        LIMIT 30
+      `, [since]),
+
+      // Resultados de partidos
+      pool.query(`
+        SELECT m.home_score, m.away_score, m.scorers, m.played_at AS ts,
+               COALESCE(uh.team_name, uh.username) AS home_team,
+               COALESCE(ua.team_name, ua.username) AS away_team,
+               t.name AS tournament_name
+        FROM matches m
+        JOIN users uh ON m.home_id = uh.id
+        JOIN users ua ON m.away_id = ua.id
+        LEFT JOIN tournaments t ON m.tournament_id = t.id
+        WHERE m.played_at > $1 AND m.home_score IS NOT NULL
+        ORDER BY m.played_at DESC
+        LIMIT 40
+      `, [since]),
+
+      // Subidas de cláusula (no están en transfers)
+      pool.query(`
+        SELECT owner_username, buyer_username, player_name, player_rating, player_position,
+               clause_amount, new_clause_amount, resolved_at AS ts
+        FROM clause_offers
+        WHERE status = 'raised' AND resolved_at > $1
+        ORDER BY resolved_at DESC
+        LIMIT 30
+      `, [since]),
+    ]);
+
+    const items = [];
+
+    if (transfersRes.status === 'fulfilled') {
+      for (const r of transfersRes.value.rows) {
+        items.push({ type: r.type === 'compra' ? 'buy' : 'release', ...r });
+      }
+    }
+    if (swapsRes.status === 'fulfilled') {
+      for (const r of swapsRes.value.rows) {
+        items.push({ type: 'swap', ...r });
+      }
+    }
+    if (matchesRes.status === 'fulfilled') {
+      for (const r of matchesRes.value.rows) {
+        let scorers = [];
+        try { scorers = JSON.parse(r.scorers || '[]'); } catch {}
+        items.push({ type: 'match', ...r, scorers });
+      }
+    }
+    if (raisedRes.status === 'fulfilled') {
+      for (const r of raisedRes.value.rows) {
+        items.push({ type: 'clause_raised', ...r });
+      }
+    }
+
+    items.sort((a, b) => b.ts - a.ts);
+    res.json(items.slice(0, 60));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
 // Serve compiled React app (production)
 const clientDist = path.join(__dirname, '../client/dist');
 if (fs.existsSync(path.join(clientDist, 'index.html'))) {

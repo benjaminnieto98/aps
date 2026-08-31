@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { getMyPlayers, getTournaments, getMatches, getScorers, getPublicConfig, getMilestones } from '../api'
+import { getMyPlayers, getTournaments, getMatches, getScorers, getPublicConfig, getMilestones, getFeed } from '../api'
 import { formatMoney } from '../utils/format'
 
 // ─── Milestone messages ───────────────────────────────────────────────────────
@@ -168,6 +168,82 @@ function MilestoneCarousel({ milestones }) {
   )
 }
 
+// ─── Activity Feed ────────────────────────────────────────────────────────────
+function fmtMoney(n) {
+  if (n == null) return null
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000)     return `$${Math.round(n / 1_000)}K`
+  return `$${n}`
+}
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts
+  const m = Math.floor(diff / 60000)
+  if (m < 2)  return 'hace un momento'
+  if (m < 60) return `hace ${m} min`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `hace ${h}h`
+  const d = Math.floor(h / 24)
+  if (d === 1) return 'ayer'
+  return `hace ${d} días`
+}
+
+const FEED_ICONS = { buy: '💰', release: '🔴', swap: '🔄', match: '⚽', clause_raised: '📈' }
+
+function FeedItem({ item }) {
+  let main = '', sub = ''
+
+  if (item.type === 'buy') {
+    const from = item.from_username ? `de ${item.from_username}` : 'agente libre'
+    main = `${item.to_username} fichó a ${item.player_name} (${item.player_position}, ${item.player_rating}⭐)`
+    sub  = `${from}${item.price ? ` · ${fmtMoney(item.price)}` : ''}`
+  } else if (item.type === 'release') {
+    main = `${item.from_username} liberó a ${item.player_name} (${item.player_position}, ${item.player_rating}⭐)`
+    sub  = item.price ? `Cobró ${fmtMoney(item.price)}` : ''
+  } else if (item.type === 'swap') {
+    main = `${item.proposer_username} ⇌ ${item.receiver_username}`
+    sub  = `${item.offered_player_name} (${item.offered_player_position}, ${item.offered_player_rating}⭐) por ${item.requested_player_name} (${item.requested_player_position}, ${item.requested_player_rating}⭐)`
+    if (item.cash_difference > 0)  sub += ` · +${fmtMoney(item.cash_difference)} del ${item.proposer_username}`
+    if (item.cash_difference < 0)  sub += ` · +${fmtMoney(Math.abs(item.cash_difference))} del ${item.receiver_username}`
+  } else if (item.type === 'match') {
+    main = `${item.home_team} ${item.home_score} - ${item.away_score} ${item.away_team}`
+    const goals = (item.scorers || [])
+      .filter(s => s.player_name)
+      .map(s => `${s.player_name}${s.count > 1 ? ` x${s.count}` : ''}`)
+      .join(', ')
+    sub = [item.tournament_name, goals].filter(Boolean).join(' · ')
+  } else if (item.type === 'clause_raised') {
+    main = `${item.owner_username} subió la cláusula de ${item.player_name} (${item.player_position}, ${item.player_rating}⭐)`
+    sub  = `${fmtMoney(item.clause_amount)} → ${fmtMoney(item.new_clause_amount)} · comprador: ${item.buyer_username}`
+  }
+
+  return (
+    <div className="flex items-start gap-3 px-4 py-3">
+      <span className="text-base mt-0.5 flex-shrink-0">{FEED_ICONS[item.type]}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-white text-sm leading-snug">{main}</p>
+        {sub && <p className="text-gray-500 text-xs mt-0.5 leading-snug">{sub}</p>}
+      </div>
+      <span className="text-gray-600 text-xs flex-shrink-0 mt-0.5">{timeAgo(item.ts)}</span>
+    </div>
+  )
+}
+
+function ActivityFeed({ feed }) {
+  if (!feed.length) return null
+  return (
+    <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-800">
+        <h2 className="text-white font-semibold text-sm">Actividad reciente</h2>
+        <p className="text-gray-500 text-xs mt-0.5">Últimos 5 días</p>
+      </div>
+      <div className="divide-y divide-gray-800/50">
+        {feed.map((item, i) => <FeedItem key={i} item={item} />)}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 function StatCard({ label, value, sub }) {
   return (
@@ -188,11 +264,13 @@ export default function Dashboard() {
   const [activeTournament, setActiveTournament] = useState(null)
   const [config, setConfig] = useState(null)
   const [milestones, setMilestones] = useState([])
+  const [feed, setFeed] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     getPublicConfig().then(r => setConfig(r.data)).catch(console.error)
     getMilestones().then(r => setMilestones(r.data)).catch(console.error)
+    getFeed().then(r => setFeed(r.data)).catch(console.error)
     Promise.all([getMyPlayers(), getTournaments(), getScorers()])
       .then(([pRes, tRes, sRes]) => {
         setPlayers(pRes.data)
@@ -246,6 +324,9 @@ export default function Dashboard() {
 
       {/* Milestone carousel */}
       <MilestoneCarousel milestones={milestones} />
+
+      {/* Activity feed */}
+      <ActivityFeed feed={feed} />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
