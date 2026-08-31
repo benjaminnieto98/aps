@@ -557,7 +557,7 @@ app.get('/api/stats/h2h', async (req, res) => {
 
 // ─── GET /api/feed — activity feed (last 5 days) ─────────────────────────────
 app.get('/api/feed', async (req, res) => {
-  const since = Date.now() - 5 * 24 * 60 * 60 * 1000;
+  const since = Date.now() - 8 * 24 * 60 * 60 * 1000;
 
   try {
     const [transfersRes, swapsRes, raisedRes, tournamentsRes] = await Promise.allSettled([

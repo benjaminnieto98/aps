@@ -231,7 +231,7 @@ function ActivityFeed({ feed }) {
     <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-800">
         <h2 className="text-white font-semibold text-sm">Actividad reciente</h2>
-        <p className="text-gray-500 text-xs mt-0.5">Últimos 5 días</p>
+        <p className="text-gray-500 text-xs mt-0.5">Últimos 8 días</p>
       </div>
       <div className="divide-y divide-gray-800/50">
         {feed.map((item, i) => <FeedItem key={i} item={item} />)}
