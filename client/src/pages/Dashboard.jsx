@@ -1,8 +1,174 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { getMyPlayers, getTournaments, getMatches, getScorers, getPublicConfig } from '../api'
+import { getMyPlayers, getTournaments, getMatches, getScorers, getPublicConfig, getMilestones } from '../api'
 import { formatMoney } from '../utils/format'
 
+// ─── Milestone messages ───────────────────────────────────────────────────────
+const MESSAGES = {
+  wins: {
+    100: [
+      t => `¡${t} llegó a las 100 victorias! La máquina empieza a rodar 💪`,
+      t => `¡100W para ${t}! Un comienzo prometedor, hay que reconocerlo 🌟`,
+      t => `¡${t} sumó su victoria número 100! Esto recién empieza 🔥`,
+    ],
+    150: [
+      t => `¡${t} alcanzó las 150 victorias! ¿Alguien puede pararlos? 💥`,
+      t => `¡150W para ${t}! Esto ya es una institución de la liga 👊`,
+      t => `¡${t} llegó a 150 victorias! La bestia está desatada 🦁`,
+    ],
+    200: [
+      t => `¡${t} llegó a las 200 victorias! Una leyenda viviente 👑`,
+      t => `¡200W para ${t}! Reverencia obligatoria 🫡`,
+      t => `¡${t} alcanzó las 200 victorias! Nada ni nadie los detiene 🚀`,
+    ],
+    250: [
+      t => `¡${t} sumó 250 victorias! Patrimonio de la liga 🌍`,
+      t => `¡250W para ${t}! ¿Esto es un videojuego o una dictadura deportiva? 😤`,
+      t => `¡${t} con 250 victorias! Los rivales ya juegan por el segundo puesto 🥈`,
+    ],
+    300: [
+      t => `¡${t} llegó a 300 victorias! Los libros de historia los esperan 📖`,
+      t => `¡300W para ${t}! ¿Alguien los vio perder alguna vez? 🤔`,
+      t => `¡${t} con 300 victorias! Esto ya trasciende el fútbol 🛐`,
+    ],
+  },
+  losses: {
+    100: [
+      t => `${t} ya colecciona 100 derrotas. Mala racha, che... 😬`,
+      t => `100 derrotas para ${t}. Tranqui, algún día va a salir ☕`,
+      t => `${t} suma su derrota 100. La esperanza es lo último que se pierde 🕯️`,
+    ],
+    150: [
+      t => `${t} lleva 150 derrotas. Esto ya no es mala suerte, es talento 💀`,
+      t => `¡150 derrotas para ${t}! Claramente no aprenden de los errores 🙈`,
+      t => `${t} con 150 derrotas. ¿Ya consideraron cambiar de deporte? 🎯`,
+    ],
+    200: [
+      t => `${t} alcanzó las 200 derrotas. Hay que reconocerles la constancia 🥲`,
+      t => `200 derrotas para ${t}. Los rivales ya los piden de calentamiento 😭`,
+      t => `${t} con 200 derrotas. Técnicamente son los mejores perdedores de la liga 🏅`,
+    ],
+    250: [
+      t => `${t} lleva 250 derrotas. ¿El estadio ya tiene descuento para los hinchas? 💸`,
+      t => `¡250 derrotas para ${t}! El entrenador podría ser una almohada y daría lo mismo 🛌`,
+      t => `${t} suma derrota 250. Oficialmente el mejor equipo en perder de la historia 🎖️`,
+    ],
+    300: [
+      t => `${t} llegó a las 300 derrotas. Necesitan psicólogo, entrenador y mucha fe ⛪`,
+      t => `¡300 derrotas para ${t}! Los rivales se pelean por jugar contra ellos 🎉`,
+      t => `${t} con 300 derrotas. La FIFA está estudiando este caso como fenómeno global 📊`,
+    ],
+  },
+  goals: {
+    100: [
+      p => `¡${p} llegó a los 100 goles! Un goleador de raza 🎯`,
+      p => `${p} marcó su gol número 100. Los arqueros lo conocen de memoria 😏`,
+      p => `¡100 goles para ${p}! La red ya le tiene miedo 🕸️`,
+    ],
+    150: [
+      p => `¡${p} alcanzó los 150 goles! Más records que cumpleaños 🎂`,
+      p => `${p} con 150 goles. Los porteros piden vacaciones cuando lo ven llegar ✈️`,
+      p => `¡150 pepas para ${p}! Alguien avise al Récord Guinness 📞`,
+    ],
+    200: [
+      p => `¡${p} marcó 200 goles! Leyenda pura 🌟`,
+      p => `${p} sumó su gol 200. La pelota ya le obedece como mascota 🐾`,
+      p => `¡200 goles para ${p}! Oficialmente ya es una institución 👑`,
+    ],
+    250: [
+      p => `${p} con 250 goles. ¿Es un jugador o un algoritmo? 🤖`,
+      p => `¡250 goles para ${p}! Los arcos deberían estar asegurados contra él 📋`,
+      p => `¡${p} llegó a 250 goles! La pelota va donde él le dice 🧲`,
+    ],
+    300: [
+      p => `¡${p} llegó a los 300 goles! Esto ya es ciencia ficción ⚗️`,
+      p => `${p} con 300 goles. Pelé acaba de pedir su camiseta 🙏`,
+      p => `¡300 goles para ${p}! La liga debería renombrar el trofeo con su nombre 🏆`,
+    ],
+  },
+}
+
+// Stable pick: same name → same message across renders
+function pickMsg(pool, name) {
+  if (!pool || !pool.length) return name
+  const hash = [...(name || '')].reduce((a, c) => a + c.charCodeAt(0), 0)
+  return pool[hash % pool.length](name)
+}
+
+// ─── Milestone Carousel ───────────────────────────────────────────────────────
+function MilestoneCarousel({ milestones }) {
+  const [idx, setIdx] = useState(0)
+
+  useEffect(() => {
+    if (milestones.length <= 1) return
+    const t = setInterval(() => setIdx(i => (i + 1) % milestones.length), 4500)
+    return () => clearInterval(t)
+  }, [milestones.length])
+
+  if (!milestones.length) return null
+
+  const m = milestones[idx]
+  const name = m.type === 'goals' ? m.player_name : m.team_name
+  const message = pickMsg(MESSAGES[m.type]?.[m.milestone], name)
+  const icon = m.type === 'wins' ? '🏆' : m.type === 'losses' ? '💀' : '⚽'
+  const sub = m.type === 'goals'
+    ? `${m.position} · Dueño: ${m.owner_username || 'Agente libre'} · ${m.value} goles en total`
+    : `Manager: ${m.username} · ${m.wins}G ${m.draws}E ${m.losses}P`
+
+  const prev = () => setIdx(i => (i - 1 + milestones.length) % milestones.length)
+  const next = () => setIdx(i => (i + 1) % milestones.length)
+
+  return (
+    <div className="relative rounded-2xl border-2 border-yellow-500/50 bg-gray-900 shadow-[0_0_32px_rgba(234,179,8,0.10)] overflow-hidden">
+      {/* shimmer line */}
+      <div className="h-px bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
+
+      <div className="px-5 pt-4 pb-3">
+        {/* label row */}
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-yellow-400 text-xs font-bold uppercase tracking-widest">⭐ Hito histórico</span>
+          <div className="flex-1 h-px bg-yellow-500/15" />
+          {milestones.length > 1 && (
+            <span className="text-gray-600 text-xs tabular-nums">{idx + 1}/{milestones.length}</span>
+          )}
+        </div>
+
+        {/* content */}
+        <div className="flex items-start gap-3">
+          <span className="text-2xl leading-none mt-0.5 flex-shrink-0">{icon}</span>
+          <div className="min-w-0">
+            <p className="text-white font-semibold text-[15px] leading-snug">{message}</p>
+            <p className="text-gray-400 text-xs mt-1.5">{sub}</p>
+          </div>
+          {/* arrow buttons right-aligned */}
+          {milestones.length > 1 && (
+            <div className="flex gap-1 ml-auto pl-2 flex-shrink-0 self-center">
+              <button onClick={prev} className="text-gray-500 hover:text-yellow-400 transition-colors text-xl leading-none px-1">‹</button>
+              <button onClick={next} className="text-gray-500 hover:text-yellow-400 transition-colors text-xl leading-none px-1">›</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* dots */}
+      {milestones.length > 1 && (
+        <div className="flex justify-center gap-1.5 pb-3">
+          {milestones.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setIdx(i)}
+              className={`rounded-full transition-all duration-300 ${
+                i === idx ? 'w-4 h-1.5 bg-yellow-400' : 'w-1.5 h-1.5 bg-gray-700 hover:bg-gray-500'
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
 function StatCard({ label, value, sub }) {
   return (
     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
@@ -21,10 +187,12 @@ export default function Dashboard() {
   const [scorers, setScorers] = useState([])
   const [activeTournament, setActiveTournament] = useState(null)
   const [config, setConfig] = useState(null)
+  const [milestones, setMilestones] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     getPublicConfig().then(r => setConfig(r.data)).catch(console.error)
+    getMilestones().then(r => setMilestones(r.data)).catch(console.error)
     Promise.all([getMyPlayers(), getTournaments(), getScorers()])
       .then(([pRes, tRes, sRes]) => {
         setPlayers(pRes.data)
@@ -75,6 +243,9 @@ export default function Dashboard() {
         <h1 className="text-white text-2xl font-bold">Inicio</h1>
         <p className="text-gray-400 text-sm mt-1">Bienvenido, {user?.username}</p>
       </div>
+
+      {/* Milestone carousel */}
+      <MilestoneCarousel milestones={milestones} />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

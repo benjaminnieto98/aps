@@ -88,6 +88,7 @@ export const cancelSwap = (id) => api.post(`/swap-offers/${id}/cancel`)
 
 // Stats records
 export const getRecords = () => api.get('/stats/records')
+export const getMilestones = () => api.get('/stats/milestones')
 export const getH2H = (user1, user2) => api.get('/stats/h2h', { params: { user1, user2 } })
 
 export default api

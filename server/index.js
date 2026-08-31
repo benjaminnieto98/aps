@@ -404,6 +404,94 @@ app.get('/api/stats/records', async (req, res) => {
   }
 });
 
+app.get('/api/stats/milestones', async (req, res) => {
+  const THRESHOLDS = [100, 150, 200, 250, 300];
+  try {
+    const [{ rows: users }, { rows: matchRows }] = await Promise.all([
+      pool.query('SELECT id, username, team_name FROM users'),
+      pool.query('SELECT home_id, away_id, home_score, away_score FROM matches WHERE home_score IS NOT NULL AND away_score IS NOT NULL'),
+    ]);
+
+    // Wins / losses per team
+    const teamStats = {};
+    for (const u of users) teamStats[u.id] = { ...u, wins: 0, losses: 0, draws: 0 };
+    for (const m of matchRows) {
+      const h = teamStats[m.home_id], a = teamStats[m.away_id];
+      if (!h || !a) continue;
+      if (m.home_score > m.away_score)      { h.wins++;  a.losses++; }
+      else if (m.home_score < m.away_score) { a.wins++;  h.losses++; }
+      else                                  { h.draws++; a.draws++;  }
+    }
+
+    // Goals per player
+    const { rows: scorerRows } = await pool.query(
+      'SELECT scorers FROM matches WHERE scorers IS NOT NULL'
+    );
+    const goalMap = {};
+    for (const r of scorerRows) {
+      try {
+        for (const s of JSON.parse(r.scorers)) {
+          if (!s.player_id) continue;
+          goalMap[s.player_id] = (goalMap[s.player_id] || 0) + (s.count || 1);
+        }
+      } catch {}
+    }
+
+    const milestones = [];
+
+    // Win milestones — highest threshold only per team
+    for (const u of Object.values(teamStats)) {
+      const crossed = THRESHOLDS.filter(t => u.wins >= t);
+      if (!crossed.length) continue;
+      milestones.push({
+        type: 'wins', milestone: crossed[crossed.length - 1], value: u.wins,
+        team_name: u.team_name || u.username, username: u.username,
+        wins: u.wins, losses: u.losses, draws: u.draws,
+      });
+    }
+
+    // Loss milestones — highest threshold only per team
+    for (const u of Object.values(teamStats)) {
+      const crossed = THRESHOLDS.filter(t => u.losses >= t);
+      if (!crossed.length) continue;
+      milestones.push({
+        type: 'losses', milestone: crossed[crossed.length - 1], value: u.losses,
+        team_name: u.team_name || u.username, username: u.username,
+        wins: u.wins, losses: u.losses, draws: u.draws,
+      });
+    }
+
+    // Goal milestones — highest threshold only per player
+    const eligiblePlayerIds = Object.keys(goalMap).filter(pid =>
+      THRESHOLDS.some(t => goalMap[pid] >= t)
+    );
+    if (eligiblePlayerIds.length) {
+      const { rows: players } = await pool.query(
+        `SELECT p.id, p.name, p.position, u.username as owner_username
+         FROM players p LEFT JOIN users u ON p.owner_id = u.id
+         WHERE p.id = ANY($1::text[])`,
+        [eligiblePlayerIds]
+      );
+      for (const p of players) {
+        const goals = goalMap[p.id];
+        const crossed = THRESHOLDS.filter(t => goals >= t);
+        if (!crossed.length) continue;
+        milestones.push({
+          type: 'goals', milestone: crossed[crossed.length - 1], value: goals,
+          player_name: p.name, position: p.position, owner_username: p.owner_username,
+        });
+      }
+    }
+
+    // Sort: highest milestone first, then highest actual value
+    milestones.sort((a, b) => b.milestone - a.milestone || b.value - a.value);
+    res.json(milestones);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error del servidor' });
+  }
+});
+
 app.get('/api/stats/h2h', async (req, res) => {
   const { user1, user2 } = req.query;
   if (!user1 || !user2) return res.status(400).json({ error: 'Se requieren user1 y user2' });

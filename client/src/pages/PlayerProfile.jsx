@@ -66,14 +66,7 @@ export default function PlayerProfile() {
       <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-white text-2xl font-bold">{player.name}</h1>
-              {player.raised_count > 0 && (
-                <span className="text-orange-400 text-xs bg-orange-400/10 border border-orange-400/30 px-2 py-1 rounded-lg" title={`Cláusula subida ${player.raised_count} ${player.raised_count === 1 ? 'vez' : 'veces'}`}>
-                  📈 ×{player.raised_count}
-                </span>
-              )}
-            </div>
+            <h1 className="text-white text-2xl font-bold">{player.name}</h1>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg ${posColor}`}>
                 {player.position}
