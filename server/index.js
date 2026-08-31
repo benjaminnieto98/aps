@@ -560,7 +560,7 @@ app.get('/api/feed', async (req, res) => {
   const since = Date.now() - 5 * 24 * 60 * 60 * 1000;
 
   try {
-    const [transfersRes, swapsRes, matchesRes, raisedRes] = await Promise.allSettled([
+    const [transfersRes, swapsRes, raisedRes, tournamentsRes] = await Promise.allSettled([
       // Compras y liberaciones
       pool.query(`
         SELECT type, player_name, player_rating, player_position,
@@ -582,22 +582,7 @@ app.get('/api/feed', async (req, res) => {
         LIMIT 30
       `, [since]),
 
-      // Resultados de partidos
-      pool.query(`
-        SELECT m.home_score, m.away_score, m.scorers, m.played_at AS ts,
-               COALESCE(uh.team_name, uh.username) AS home_team,
-               COALESCE(ua.team_name, ua.username) AS away_team,
-               t.name AS tournament_name
-        FROM matches m
-        JOIN users uh ON m.home_id = uh.id
-        JOIN users ua ON m.away_id = ua.id
-        LEFT JOIN tournaments t ON m.tournament_id = t.id
-        WHERE m.played_at > $1 AND m.home_score IS NOT NULL
-        ORDER BY m.played_at DESC
-        LIMIT 40
-      `, [since]),
-
-      // Subidas de cláusula (no están en transfers)
+      // Subidas de cláusula
       pool.query(`
         SELECT owner_username, buyer_username, player_name, player_rating, player_position,
                clause_amount, new_clause_amount, resolved_at AS ts
@@ -605,6 +590,20 @@ app.get('/api/feed', async (req, res) => {
         WHERE status = 'raised' AND resolved_at > $1
         ORDER BY resolved_at DESC
         LIMIT 30
+      `, [since]),
+
+      // Torneos finalizados recientemente: usa el último partido jugado como proxy de cuándo terminó
+      pool.query(`
+        SELECT t.id, t.name, t.tournament_type,
+               t.liga_winner_id, t.copa_winner_id, t.supercopa_winner_id,
+               MAX(m.played_at) AS ts
+        FROM tournaments t
+        JOIN matches m ON m.tournament_id = t.id
+        WHERE t.status = 'finished'
+        GROUP BY t.id
+        HAVING MAX(m.played_at) > $1
+        ORDER BY MAX(m.played_at) DESC
+        LIMIT 5
       `, [since]),
     ]);
 
@@ -620,16 +619,47 @@ app.get('/api/feed', async (req, res) => {
         items.push({ type: 'swap', ...r });
       }
     }
-    if (matchesRes.status === 'fulfilled') {
-      for (const r of matchesRes.value.rows) {
-        let scorers = [];
-        try { scorers = JSON.parse(r.scorers || '[]'); } catch {}
-        items.push({ type: 'match', ...r, scorers });
-      }
-    }
     if (raisedRes.status === 'fulfilled') {
       for (const r of raisedRes.value.rows) {
         items.push({ type: 'clause_raised', ...r });
+      }
+    }
+
+    // Torneos: resolver nombres de campeones y goleador del torneo
+    if (tournamentsRes.status === 'fulfilled') {
+      for (const t of tournamentsRes.value.rows) {
+        const winnerId = t.supercopa_winner_id || t.copa_winner_id || t.liga_winner_id;
+        if (!winnerId) continue;
+
+        // Nombre del campeón
+        const { rows: uRows } = await pool.query(
+          'SELECT username, team_name FROM users WHERE id = $1', [winnerId]
+        );
+        const champion = uRows[0] ? (uRows[0].team_name || uRows[0].username) : '?';
+
+        // Goleador del torneo
+        const { rows: mRows } = await pool.query(
+          'SELECT scorers FROM matches WHERE tournament_id = $1 AND scorers IS NOT NULL', [t.id]
+        );
+        const goalMap = {};
+        for (const m of mRows) {
+          try {
+            for (const s of JSON.parse(m.scorers)) {
+              if (!s.player_id) continue;
+              goalMap[s.player_id] = (goalMap[s.player_id] || 0) + (s.count || 1);
+            }
+          } catch {}
+        }
+        const topEntry = Object.entries(goalMap).sort((a, b) => b[1] - a[1])[0];
+        let top_scorer = null, top_goals = 0;
+        if (topEntry) {
+          const [pid, goals] = topEntry;
+          const { rows: pRows } = await pool.query('SELECT name FROM players WHERE id = $1', [pid]);
+          top_scorer = pRows[0]?.name || null;
+          top_goals  = goals;
+        }
+
+        items.push({ type: 'tournament', tournament_name: t.name, champion, top_scorer, top_goals, ts: t.ts });
       }
     }
 

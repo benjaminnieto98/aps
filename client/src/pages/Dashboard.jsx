@@ -188,7 +188,7 @@ function timeAgo(ts) {
   return `hace ${d} días`
 }
 
-const FEED_ICONS = { buy: '💰', release: '🔴', swap: '🔄', match: '⚽', clause_raised: '📈' }
+const FEED_ICONS = { buy: '💰', release: '🔴', swap: '🔄', tournament: '🏆', clause_raised: '📈' }
 
 function FeedItem({ item }) {
   let main = '', sub = ''
@@ -205,13 +205,9 @@ function FeedItem({ item }) {
     sub  = `${item.offered_player_name} (${item.offered_player_position}, ${item.offered_player_rating}⭐) por ${item.requested_player_name} (${item.requested_player_position}, ${item.requested_player_rating}⭐)`
     if (item.cash_difference > 0)  sub += ` · +${fmtMoney(item.cash_difference)} del ${item.proposer_username}`
     if (item.cash_difference < 0)  sub += ` · +${fmtMoney(Math.abs(item.cash_difference))} del ${item.receiver_username}`
-  } else if (item.type === 'match') {
-    main = `${item.home_team} ${item.home_score} - ${item.away_score} ${item.away_team}`
-    const goals = (item.scorers || [])
-      .filter(s => s.player_name)
-      .map(s => `${s.player_name}${s.count > 1 ? ` x${s.count}` : ''}`)
-      .join(', ')
-    sub = [item.tournament_name, goals].filter(Boolean).join(' · ')
+  } else if (item.type === 'tournament') {
+    main = `${item.tournament_name} — campeón: ${item.champion}`
+    sub  = item.top_scorer ? `Goleador: ${item.top_scorer} (${item.top_goals} goles)` : ''
   } else if (item.type === 'clause_raised') {
     main = `${item.owner_username} subió la cláusula de ${item.player_name} (${item.player_position}, ${item.player_rating}⭐)`
     sub  = `${fmtMoney(item.clause_amount)} → ${fmtMoney(item.new_clause_amount)} · comprador: ${item.buyer_username}`
