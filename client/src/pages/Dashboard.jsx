@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { getMyPlayers, getTournaments, getMatches, getScorers, getPublicConfig, getMilestones, getFeed } from '../api'
-import { formatMoney } from '../utils/format'
+import { formatMoney, formatMoneyShort } from '../utils/format'
 
 // ─── Milestone messages ───────────────────────────────────────────────────────
 const MESSAGES = {
@@ -98,12 +98,14 @@ function pickMsg(pool, name) {
 // ─── Milestone Carousel ───────────────────────────────────────────────────────
 function MilestoneCarousel({ milestones }) {
   const [idx, setIdx] = useState(0)
+  const touchX = useRef(null)
 
+  // Restart the auto-advance timer whenever idx changes (manual nav or swipe)
   useEffect(() => {
     if (milestones.length <= 1) return
-    const t = setInterval(() => setIdx(i => (i + 1) % milestones.length), 4500)
-    return () => clearInterval(t)
-  }, [milestones.length])
+    const t = setTimeout(() => setIdx(i => (i + 1) % milestones.length), 4500)
+    return () => clearTimeout(t)
+  }, [idx, milestones.length])
 
   if (!milestones.length) return null
 
@@ -118,8 +120,21 @@ function MilestoneCarousel({ milestones }) {
   const prev = () => setIdx(i => (i - 1 + milestones.length) % milestones.length)
   const next = () => setIdx(i => (i + 1) % milestones.length)
 
+  const onTouchStart = e => { touchX.current = e.touches[0].clientX }
+  const onTouchEnd = e => {
+    if (touchX.current == null) return
+    const dx = e.changedTouches[0].clientX - touchX.current
+    touchX.current = null
+    if (Math.abs(dx) < 40) return
+    dx < 0 ? next() : prev()
+  }
+
   return (
-    <div className="relative rounded-2xl border-2 border-yellow-500/50 bg-gray-900 shadow-[0_0_32px_rgba(234,179,8,0.10)] overflow-hidden">
+    <div
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      className="relative rounded-2xl border-2 border-yellow-500/50 bg-gray-900 shadow-[0_0_32px_rgba(234,179,8,0.10)] overflow-hidden"
+    >
       {/* shimmer line */}
       <div className="h-px bg-gradient-to-r from-transparent via-yellow-400/60 to-transparent" />
 
@@ -142,7 +157,7 @@ function MilestoneCarousel({ milestones }) {
           </div>
           {/* arrow buttons right-aligned */}
           {milestones.length > 1 && (
-            <div className="flex gap-1 ml-auto pl-2 flex-shrink-0 self-center">
+            <div className="hidden sm:flex gap-1 ml-auto pl-2 flex-shrink-0 self-center">
               <button onClick={prev} className="text-gray-500 hover:text-yellow-400 transition-colors text-xl leading-none px-1">‹</button>
               <button onClick={next} className="text-gray-500 hover:text-yellow-400 transition-colors text-xl leading-none px-1">›</button>
             </div>
@@ -169,12 +184,7 @@ function MilestoneCarousel({ milestones }) {
 }
 
 // ─── Activity Feed ────────────────────────────────────────────────────────────
-function fmtMoney(n) {
-  if (n == null) return null
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000)     return `$${Math.round(n / 1_000)}K`
-  return `$${n}`
-}
+const fmtMoney = formatMoneyShort
 
 function timeAgo(ts) {
   const diff = Date.now() - ts
@@ -217,25 +227,38 @@ function FeedItem({ item }) {
     <div className="flex items-start gap-3 px-4 py-3">
       <span className="text-base mt-0.5 flex-shrink-0">{FEED_ICONS[item.type]}</span>
       <div className="flex-1 min-w-0">
-        <p className="text-white text-sm leading-snug">{main}</p>
-        {sub && <p className="text-gray-500 text-xs mt-0.5 leading-snug">{sub}</p>}
+        <p className="text-white text-sm leading-snug break-words">{main}</p>
+        {sub && <p className="text-gray-500 text-xs mt-0.5 leading-snug break-words">{sub}</p>}
+        <p className="sm:hidden text-gray-600 text-[11px] mt-1">{timeAgo(item.ts)}</p>
       </div>
-      <span className="text-gray-600 text-xs flex-shrink-0 mt-0.5">{timeAgo(item.ts)}</span>
+      <span className="hidden sm:block text-gray-600 text-xs flex-shrink-0 mt-0.5">{timeAgo(item.ts)}</span>
     </div>
   )
 }
 
+const FEED_PREVIEW = 8
+
 function ActivityFeed({ feed }) {
+  const [expanded, setExpanded] = useState(false)
   if (!feed.length) return null
+  const visible = expanded ? feed : feed.slice(0, FEED_PREVIEW)
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-800">
+      <div className="px-4 py-3 border-b border-gray-800 flex items-baseline justify-between gap-2">
         <h2 className="text-white font-semibold text-sm">Actividad reciente</h2>
-        <p className="text-gray-500 text-xs mt-0.5">Últimos 8 días</p>
+        <p className="text-gray-500 text-xs">Últimos 8 días · {feed.length}</p>
       </div>
       <div className="divide-y divide-gray-800/50">
-        {feed.map((item, i) => <FeedItem key={i} item={item} />)}
+        {visible.map((item, i) => <FeedItem key={i} item={item} />)}
       </div>
+      {feed.length > FEED_PREVIEW && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="w-full py-3 text-sm font-medium text-green-400 hover:text-green-300 border-t border-gray-800 active:bg-gray-800/50"
+        >
+          {expanded ? 'Ver menos' : `Ver ${feed.length - FEED_PREVIEW} más`}
+        </button>
+      )}
     </div>
   )
 }
@@ -243,10 +266,10 @@ function ActivityFeed({ feed }) {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 function StatCard({ label, value, sub }) {
   return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+    <div className="bg-gray-900 rounded-xl p-3 sm:p-4 border border-gray-800 min-w-0">
       <div className="text-gray-400 text-xs mb-1">{label}</div>
-      <div className="text-white text-2xl font-bold">{value}</div>
-      {sub && <div className="text-gray-500 text-xs mt-1">{sub}</div>}
+      <div className="text-white text-xl sm:text-2xl font-bold truncate">{value}</div>
+      {sub && <div className="text-gray-500 text-xs mt-1 truncate">{sub}</div>}
     </div>
   )
 }
@@ -312,9 +335,9 @@ export default function Dashboard() {
   if (loading) return <div className="text-gray-400 text-center py-20">Cargando...</div>
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <div>
-        <h1 className="text-white text-2xl font-bold">Inicio</h1>
+        <h1 className="text-white text-xl sm:text-2xl font-bold">Inicio</h1>
         <p className="text-gray-400 text-sm mt-1">Bienvenido, {user?.username}</p>
       </div>
 
@@ -325,8 +348,8 @@ export default function Dashboard() {
       <ActivityFeed feed={feed} />
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Presupuesto" value={formatMoney(user?.budget)} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard label="Presupuesto" value={formatMoneyShort(user?.budget)} sub={formatMoney(user?.budget)} />
         <StatCard label="Plantel" value={`${players.length}`} sub={`máximo ${config?.maxRoster ?? 22} jugadores`} />
         <StatCard label="Equipo" value={user?.team_name || '—'} sub="equipo asignado" />
         <StatCard
@@ -349,14 +372,14 @@ export default function Dashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-gray-500 text-xs border-b border-gray-800">
-                    <th className="px-4 py-2 text-left">#</th>
-                    <th className="px-4 py-2 text-left">Equipo</th>
-                    <th className="px-4 py-2 text-center">PTS</th>
-                    <th className="px-4 py-2 text-center">PJ</th>
-                    <th className="px-4 py-2 text-center">G</th>
-                    <th className="px-4 py-2 text-center">E</th>
-                    <th className="px-4 py-2 text-center">P</th>
-                    <th className="px-4 py-2 text-center">DG</th>
+                    <th className="pl-4 pr-2 py-2 text-left">#</th>
+                    <th className="px-2 sm:px-4 py-2 text-left">Equipo</th>
+                    <th className="px-2 sm:px-4 py-2 text-center">PTS</th>
+                    <th className="px-2 sm:px-4 py-2 text-center">PJ</th>
+                    <th className="hidden sm:table-cell px-4 py-2 text-center">G</th>
+                    <th className="hidden sm:table-cell px-4 py-2 text-center">E</th>
+                    <th className="hidden sm:table-cell px-4 py-2 text-center">P</th>
+                    <th className="pl-2 pr-4 sm:px-4 py-2 text-center">DG</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -365,14 +388,14 @@ export default function Dashboard() {
                       key={s.id}
                       className={`border-b border-gray-800/50 ${s.id === user?.id ? 'bg-green-500/5' : ''}`}
                     >
-                      <td className="px-4 py-2.5 text-gray-400">{i + 1}</td>
-                      <td className="px-4 py-2.5 text-white font-medium truncate max-w-[120px]">{s.name}</td>
-                      <td className="px-4 py-2.5 text-center text-green-400 font-bold">{s.pts}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-400">{s.pj}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-400">{s.g}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-400">{s.e}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-400">{s.p}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-400">{s.gd > 0 ? `+${s.gd}` : s.gd}</td>
+                      <td className="pl-4 pr-2 py-2.5 text-gray-400">{i + 1}</td>
+                      <td className="px-2 sm:px-4 py-2.5 text-white font-medium truncate max-w-[140px]">{s.name}</td>
+                      <td className="px-2 sm:px-4 py-2.5 text-center text-green-400 font-bold">{s.pts}</td>
+                      <td className="px-2 sm:px-4 py-2.5 text-center text-gray-400">{s.pj}</td>
+                      <td className="hidden sm:table-cell px-4 py-2.5 text-center text-gray-400">{s.g}</td>
+                      <td className="hidden sm:table-cell px-4 py-2.5 text-center text-gray-400">{s.e}</td>
+                      <td className="hidden sm:table-cell px-4 py-2.5 text-center text-gray-400">{s.p}</td>
+                      <td className="pl-2 pr-4 sm:px-4 py-2.5 text-center text-gray-400">{s.gd > 0 ? `+${s.gd}` : s.gd}</td>
                     </tr>
                   ))}
                 </tbody>

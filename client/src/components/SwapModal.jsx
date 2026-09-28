@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { getMyPlayers, proposeSwap } from '../api'
 import { formatMoney, ratingColor } from '../utils/format'
+import { Modal, MoneyInput } from './ui'
 
 export default function SwapModal({ player, onClose, onSuccess }) {
   const [myPlayers, setMyPlayers]       = useState([])
@@ -50,8 +51,7 @@ export default function SwapModal({ player, onClose, onSuccess }) {
   const selectedPlayer = myPlayers.find(p => p.id === selectedId)
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 rounded-xl p-5 w-full max-w-md border border-gray-700">
+    <Modal onClose={onClose} maxWidth="sm:max-w-md">
         <h3 className="text-white font-semibold mb-1">Proponer intercambio</h3>
         <p className="text-gray-500 text-xs mb-4">
           Dueño actual: <span className="text-gray-300">{player.owner_username}</span>
@@ -64,13 +64,13 @@ export default function SwapModal({ player, onClose, onSuccess }) {
         ) : (
           <>
             {/* Player comparison */}
-            <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-start mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-2 items-stretch sm:items-start mb-4">
               <div className="bg-gray-800 rounded-lg p-3">
                 <p className="text-gray-500 text-xs mb-2">Ofrezco</p>
                 <select
                   value={selectedId}
                   onChange={e => setSelectedId(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-md px-2 py-1.5 text-white text-xs focus:outline-none focus:border-purple-500"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-md px-2 py-2 sm:py-1.5 text-white text-xs focus:outline-none focus:border-purple-500"
                 >
                   {myPlayers.map(p => (
                     <option key={p.id} value={p.id}>{p.name} ({p.rating})</option>
@@ -81,7 +81,7 @@ export default function SwapModal({ player, onClose, onSuccess }) {
                 )}
               </div>
 
-              <div className="flex items-center justify-center pt-6 text-gray-500 text-lg">⇌</div>
+              <div className="flex items-center justify-center sm:pt-6 text-gray-500 text-lg rotate-90 sm:rotate-0">⇌</div>
 
               <div className="bg-gray-800 rounded-lg p-3">
                 <p className="text-gray-500 text-xs mb-2">Pido</p>
@@ -103,7 +103,7 @@ export default function SwapModal({ player, onClose, onSuccess }) {
                   <button
                     key={opt.key}
                     onClick={() => { setCashDir(opt.key); setCashAmt('') }}
-                    className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                    className={`flex-1 sm:flex-none text-xs px-2.5 py-2 sm:py-1 rounded-md transition-colors ${
                       cashDir === opt.key
                         ? 'bg-purple-600 text-white'
                         : 'bg-gray-700 text-gray-400 hover:text-white'
@@ -114,13 +114,12 @@ export default function SwapModal({ player, onClose, onSuccess }) {
                 ))}
               </div>
               {cashDir !== 'none' && (
-                <input
-                  type="number"
+                <MoneyInput
                   min="0"
                   placeholder="Monto de compensación"
                   value={cashAmt}
                   onChange={e => setCashAmt(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500"
                   autoFocus
                 />
               )}
@@ -143,20 +142,19 @@ export default function SwapModal({ player, onClose, onSuccess }) {
               <button
                 onClick={handlePropose}
                 disabled={loading || !selectedId}
-                className="flex-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+                className="flex-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
               >
                 {loading ? 'Enviando...' : 'Proponer intercambio'}
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors"
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2.5 rounded-lg transition-colors"
               >
                 Cancelar
               </button>
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }

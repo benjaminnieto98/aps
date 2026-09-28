@@ -3,6 +3,18 @@ export const formatMoney = (n) => {
   return '$' + Number(n).toLocaleString('es-AR').replace(/,/g, '.')
 }
 
+// Compact money for tight spots: $130.0M, $850K
+export const formatMoneyShort = (n) => {
+  if (n === null || n === undefined) return '$0'
+  const v = Number(n)
+  const abs = Math.abs(v)
+  const sign = v < 0 ? '-' : ''
+  if (abs >= 1_000_000_000) return `${sign}$${Math.round(abs / 1_000_000).toLocaleString('es-AR')}M`
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000)     return `${sign}$${Math.round(abs / 1_000)}K`
+  return `${sign}$${abs}`
+}
+
 export const positionOrder = ['GK', 'CB', 'LB', 'CDM', 'CM', 'CAM', 'LW', 'ST']
 
 export const positionLabel = {

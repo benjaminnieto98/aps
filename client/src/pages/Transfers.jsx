@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getTransfers } from '../api'
-import { formatMoney } from '../utils/format'
+import { formatMoney, formatMoneyShort } from '../utils/format'
 
 const TYPE_LABELS = {
   compra:     { label: 'Compra',     color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
   liberacion: { label: 'Liberación', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+  intercambio:{ label: 'Intercambio',color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
   asignacion: { label: 'Asignación', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
   reset:      { label: 'Reset',      color: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
 }
@@ -74,59 +75,60 @@ export default function Transfers() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-white text-2xl font-bold">Historial de Transferencias</h1>
+        <h1 className="text-white text-xl sm:text-2xl font-bold">Historial de Transferencias</h1>
         <p className="text-gray-400 text-sm mt-1">{data.total} movimientos en total</p>
       </div>
 
       {/* Filters */}
       <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-        <div className="flex flex-wrap gap-3 items-end">
-          <div>
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3 sm:items-end">
+          <div className="col-span-2 sm:col-span-1">
             <label className="text-gray-500 text-xs block mb-1">Tipo</label>
             <select
               value={pending.type}
               onChange={e => setPending(prev => ({ ...prev, type: e.target.value }))}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
+              className="w-full sm:w-auto bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500"
             >
               <option value="">Todos</option>
               <option value="compra">Compra</option>
+              <option value="intercambio">Intercambio</option>
               <option value="liberacion">Liberación</option>
               <option value="asignacion">Asignación</option>
               <option value="reset">Reset</option>
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="text-gray-500 text-xs block mb-1">Jugador</label>
             <input
-              type="text"
+              type="search"
               placeholder="Nombre..."
               value={pending.player}
               onChange={e => setPending(prev => ({ ...prev, player: e.target.value }))}
               onKeyDown={e => e.key === 'Enter' && applyFilters()}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 w-40"
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 w-full sm:w-40"
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="text-gray-500 text-xs block mb-1">Usuario</label>
             <input
-              type="text"
+              type="search"
               placeholder="Manager..."
               value={pending.user}
               onChange={e => setPending(prev => ({ ...prev, user: e.target.value }))}
               onKeyDown={e => e.key === 'Enter' && applyFilters()}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 w-40"
+              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500 w-full sm:w-40"
             />
           </div>
           <button
             onClick={applyFilters}
-            className="bg-green-500 hover:bg-green-400 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            className={`${hasFilters ? '' : 'col-span-2'} bg-green-500 hover:bg-green-400 text-white text-sm font-medium px-4 py-2.5 sm:py-2 rounded-lg transition-colors`}
           >
             Buscar
           </button>
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2 rounded-lg transition-colors"
+              className="bg-gray-700 hover:bg-gray-600 text-white text-sm px-3 py-2.5 sm:py-2 rounded-lg transition-colors"
             >
               Limpiar
             </button>
@@ -143,7 +145,50 @@ export default function Transfers() {
             {hasFilters ? 'No hay resultados para ese filtro.' : 'Todavía no hay transferencias registradas.'}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile: cards */}
+          <div className="md:hidden divide-y divide-gray-800/50">
+            {data.transfers.map(t => (
+              <div
+                key={t.id}
+                className="px-4 py-3 active:bg-gray-800/40"
+                onClick={() => t.player_id && navigate(`/player/${t.player_id}`)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-xs font-bold ${POS_COLORS[t.player_position] || 'text-gray-400'}`}>
+                        {t.player_position}
+                      </span>
+                      <span className="text-white font-medium text-sm">{t.player_name}</span>
+                      <span className="text-yellow-400 text-xs font-bold">{t.player_rating}</span>
+                    </div>
+                    <div className="text-xs mt-1 flex items-center gap-1 flex-wrap">
+                      {t.from_username
+                        ? <span className="text-gray-300">{t.from_username}</span>
+                        : <span className="text-gray-600 italic">Agente libre</span>}
+                      <span className="text-gray-600">→</span>
+                      {t.to_username
+                        ? <span className="text-gray-300">{t.to_username}</span>
+                        : <span className="text-gray-600 italic">Liberado</span>}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 space-y-1">
+                    {t.price != null && (
+                      <div className={`font-bold text-sm ${t.type === 'compra' ? 'text-green-400' : 'text-red-400'}`}>
+                        {formatMoneyShort(t.price)}
+                      </div>
+                    )}
+                    <TypeBadge type={t.type} />
+                  </div>
+                </div>
+                <div className="text-gray-600 text-[11px] mt-1.5">{formatDate(t.created_at)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-gray-500 text-xs border-b border-gray-800 bg-gray-800/50">
@@ -204,12 +249,13 @@ export default function Transfers() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-gray-500 text-sm">
             Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, data.total)} de {data.total}
           </p>

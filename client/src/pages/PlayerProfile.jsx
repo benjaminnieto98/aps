@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getPlayerProfile } from '../api'
 import { useAuth } from '../contexts/AuthContext'
-import { formatMoney, ratingColor } from '../utils/format'
+import { formatMoney, formatMoneyShort, ratingColor } from '../utils/format'
 import SwapModal from '../components/SwapModal'
 
 const TYPE_LABELS = {
@@ -63,10 +63,10 @@ export default function PlayerProfile() {
       </button>
 
       {/* Player header */}
-      <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 sm:p-6">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-white text-2xl font-bold">{player.name}</h1>
+          <div className="min-w-0">
+            <h1 className="text-white text-xl sm:text-2xl font-bold">{player.name}</h1>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg ${posColor}`}>
                 {player.position}
@@ -88,7 +88,7 @@ export default function PlayerProfile() {
         </div>
 
         {/* Stats strip */}
-        <div className="grid grid-cols-3 gap-3 mt-5">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-5">
           <div className="bg-gray-800 rounded-xl p-3 text-center">
             <div className="text-green-400 text-2xl font-bold">{goals}</div>
             <div className="text-gray-500 text-xs mt-0.5">Goles</div>
@@ -162,9 +162,9 @@ export default function PlayerProfile() {
             {history.map(t => {
               const typeInfo = TYPE_LABELS[t.type] || { label: t.type, color: 'text-gray-400' }
               return (
-                <div key={t.id} className="px-5 py-3 flex items-center gap-3">
+                <div key={t.id} className="px-4 sm:px-5 py-3 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 text-sm">
+                    <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap text-sm">
                       <span className={`font-medium ${typeInfo.color}`}>{typeInfo.label}</span>
                       {t.from_username && (
                         <>
@@ -188,8 +188,9 @@ export default function PlayerProfile() {
                     <div className="text-gray-600 text-xs mt-0.5">{formatDate(t.created_at)}</div>
                   </div>
                   {t.price != null && (
-                    <div className={`text-sm font-bold ${t.type === 'compra' ? 'text-green-400' : 'text-red-400'}`}>
-                      {formatMoney(t.price)}
+                    <div className={`text-sm font-bold shrink-0 ${t.type === 'compra' ? 'text-green-400' : 'text-red-400'}`}>
+                      <span className="sm:hidden">{formatMoneyShort(t.price)}</span>
+                      <span className="hidden sm:inline">{formatMoney(t.price)}</span>
                     </div>
                   )}
                 </div>

@@ -17,7 +17,7 @@ function ProtectedRoute({ children, adminOnly = false }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-950">
+      <div className="flex items-center justify-center h-dvh bg-gray-950">
         <div className="text-green-500 text-xl">Cargando...</div>
       </div>
     )
@@ -34,7 +34,7 @@ function AppRoutes() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-950">
+      <div className="flex items-center justify-center h-dvh bg-gray-950">
         <div className="text-green-500 text-xl">Cargando...</div>
       </div>
     )

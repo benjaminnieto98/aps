@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getMarketPlayers, getClausePlayers, getFreePlayers, buyPlayer, makeDirectOffer, getSentOffers, acceptRaisedOffer, cancelOffer, getAllClauseOffers, getAllSwapOffers, getSentSwaps, cancelSwap, listPlayer, setClause, releasePlayer, getPublicConfig } from '../api'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMoney, ratingColor } from '../utils/format'
 import SwapModal from '../components/SwapModal'
+import { Modal, Tabs, MoneyInput } from '../components/ui'
 
 const STATUS_LABELS = {
   pending:   { label: 'Pendiente',       color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30' },
@@ -15,62 +17,77 @@ const STATUS_LABELS = {
 const ALL_POSITIONS = ['GK', 'CB', 'LB', 'CDM', 'CM', 'CAM', 'LW', 'ST']
 
 function PlayerRow({ player, priceField, onBuy, isClause, onDirectOffer, onSwap, onOwnAction }) {
+  const navigate = useNavigate()
   const isOwn = !!player.is_own
+
+  // Same buttons rendered inline on desktop and as a full-width row on mobile
+  const btn = (mobile, color) =>
+    `text-white text-xs font-semibold rounded-lg transition-colors ${color} ${
+      mobile ? 'flex-1 min-h-[40px] px-2 leading-tight' : 'px-3 py-1.5 whitespace-nowrap'
+    }`
+
+  const actions = (mobile) => isOwn && onOwnAction ? (
+    <>
+      <button onClick={() => onOwnAction(player, 'list')} className={btn(mobile, 'bg-green-700 hover:bg-green-600')}>
+        Poner en venta
+      </button>
+      <button onClick={() => onOwnAction(player, 'clause')} className={btn(mobile, 'bg-orange-700 hover:bg-orange-600')}>
+        Subir cláusula
+      </button>
+      <button onClick={() => onOwnAction(player, 'release')} className={btn(mobile, 'bg-red-800 hover:bg-red-700')}>
+        Liberar
+      </button>
+    </>
+  ) : (
+    <>
+      {isClause && onDirectOffer && (
+        <button onClick={() => onDirectOffer(player)} className={btn(mobile, 'bg-blue-700 hover:bg-blue-600')}>
+          {mobile ? 'Ofertar' : 'Hacer oferta'}
+        </button>
+      )}
+      {isClause && onSwap && (
+        <button onClick={() => onSwap(player)} className={btn(mobile, 'bg-purple-700 hover:bg-purple-600')}>
+          ⇌ Intercambio
+        </button>
+      )}
+      <button
+        onClick={() => onBuy(player)}
+        className={btn(mobile, isClause ? 'bg-orange-600 hover:bg-orange-500' : 'bg-green-500 hover:bg-green-400')}
+      >
+        {isClause ? (mobile ? 'Cláusula' : 'Activar cláusula') : 'Comprar'}
+      </button>
+    </>
+  )
+
   return (
-    <div className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors ${isOwn ? 'bg-blue-500/5' : ''}`}>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-white font-medium text-sm">{player.name}</span>
-          {isOwn && <span className="text-blue-400 text-xs bg-blue-400/10 border border-blue-400/30 px-1.5 py-0.5 rounded">Mi jugador</span>}
+    <div className={`px-4 py-3 hover:bg-gray-800/50 transition-colors ${isOwn ? 'bg-blue-500/5' : ''}`}>
+      <div className="flex items-start md:items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
+            <button
+              onClick={() => navigate(`/player/${player.id}`)}
+              className="text-white font-medium text-sm text-left hover:text-green-400 transition-colors"
+            >
+              {player.name}
+            </button>
+            <span className={`text-sm font-bold ${ratingColor(player.rating)}`}>{player.rating}</span>
+            <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{player.position}</span>
+            {isOwn && <span className="text-blue-400 text-xs bg-blue-400/10 border border-blue-400/30 px-1.5 py-0.5 rounded">Mi jugador</span>}
+          </div>
+          <div className="text-gray-500 text-xs truncate mt-0.5">{player.nationality} · {player.pes_team}</div>
+          {player.owner_username && !isOwn && (
+            <div className="text-gray-600 text-xs truncate">Dueño: {player.owner_username}</div>
+          )}
         </div>
-        <div className="text-gray-500 text-xs">{player.nationality} · {player.pes_team}</div>
-        {player.owner_username && !isOwn && (
-          <div className="text-gray-600 text-xs">Dueño: {player.owner_username}</div>
-        )}
-      </div>
-      <div className="flex items-center gap-2 flex-wrap justify-end">
-        <span className={`text-sm font-bold ${ratingColor(player.rating)}`}>{player.rating}</span>
-        <span className="bg-gray-700 text-gray-300 text-xs px-1.5 py-0.5 rounded">{player.position}</span>
-        <div className="text-right min-w-[90px]">
+        <div className="text-right shrink-0">
           <div className="text-green-400 font-bold text-sm">{formatMoney(player[priceField])}</div>
         </div>
-        {isOwn && onOwnAction ? (
-          <>
-            <button onClick={() => onOwnAction(player, 'list')}
-              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-green-700 hover:bg-green-600">
-              Poner en venta
-            </button>
-            <button onClick={() => onOwnAction(player, 'clause')}
-              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-orange-700 hover:bg-orange-600">
-              Subir cláusula
-            </button>
-            <button onClick={() => onOwnAction(player, 'release')}
-              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-red-800 hover:bg-red-700">
-              Liberar
-            </button>
-          </>
-        ) : (
-          <>
-            {isClause && onDirectOffer && (
-              <button onClick={() => onDirectOffer(player)}
-                className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-blue-700 hover:bg-blue-600">
-                Hacer oferta
-              </button>
-            )}
-            {isClause && onSwap && (
-              <button onClick={() => onSwap(player)}
-                className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap bg-purple-700 hover:bg-purple-600">
-                ⇌ Intercambio
-              </button>
-            )}
-            <button onClick={() => onBuy(player)}
-              className={`text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-                isClause ? 'bg-orange-600 hover:bg-orange-500' : 'bg-green-500 hover:bg-green-400'
-              }`}>
-              {isClause ? 'Activar cláusula' : 'Comprar'}
-            </button>
-          </>
-        )}
+        <div className="hidden md:flex items-center gap-2 shrink-0">
+          {actions(false)}
+        </div>
+      </div>
+      <div className="md:hidden flex gap-2 mt-2.5">
+        {actions(true)}
       </div>
     </div>
   )
@@ -113,8 +130,8 @@ function OwnPlayerModal({ action, config, onClose, onSuccess }) {
   const titles = { list: 'Poner en venta', clause: 'Subir cláusula', release: 'Liberar jugador' }
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-sm border border-gray-700 shadow-2xl space-y-4">
+    <Modal onClose={onClose}>
+      <div className="space-y-4">
         <div>
           <h3 className="text-white text-lg font-bold">{titles[type]}</h3>
           <p className="text-gray-400 text-sm">{player.name} · <span className={ratingColor(player.rating)}>{player.rating}</span> · {player.position}</p>
@@ -132,18 +149,18 @@ function OwnPlayerModal({ action, config, onClose, onSuccess }) {
             {type === 'list' && (
               <div className="space-y-2">
                 <label className="text-gray-400 text-xs">Precio de venta (máx. {formatMoney(effectiveClause)})</label>
-                <input type="number" min="1" placeholder="Ingresá el precio..."
+                <MoneyInput min="1" placeholder="Ingresá el precio..."
                   value={amount} onChange={e => setAmount(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500" />
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-green-500" />
               </div>
             )}
 
             {type === 'clause' && (
               <div className="space-y-2">
                 <label className="text-gray-400 text-xs">Nueva cláusula (mayor a {formatMoney(effectiveClause)})</label>
-                <input type="number" min={effectiveClause + 1} placeholder="Nuevo monto..."
+                <MoneyInput min={effectiveClause + 1} placeholder="Nuevo monto..."
                   value={amount} onChange={e => setAmount(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-500" />
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500" />
                 {clauseCost > 0 && (
                   <p className="text-orange-400 text-xs">Pagás la diferencia: <strong>{formatMoney(clauseCost)}</strong></p>
                 )}
@@ -161,7 +178,7 @@ function OwnPlayerModal({ action, config, onClose, onSuccess }) {
 
             <div className="flex gap-2">
               <button onClick={handleSubmit} disabled={loading}
-                className={`flex-1 text-white text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50 ${
+                className={`flex-1 text-white text-sm font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50 ${
                   type === 'release' ? 'bg-red-600 hover:bg-red-500' :
                   type === 'clause'  ? 'bg-orange-600 hover:bg-orange-500' :
                   'bg-green-600 hover:bg-green-500'
@@ -169,7 +186,7 @@ function OwnPlayerModal({ action, config, onClose, onSuccess }) {
                 {loading ? 'Procesando...' : 'Confirmar'}
               </button>
               <button onClick={onClose}
-                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors">
+                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2.5 rounded-lg transition-colors">
                 Cancelar
               </button>
             </div>
@@ -177,12 +194,12 @@ function OwnPlayerModal({ action, config, onClose, onSuccess }) {
         )}
 
         {done && (
-          <button onClick={onClose} className="w-full bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors">
+          <button onClick={onClose} className="w-full bg-gray-700 hover:bg-gray-600 text-white text-sm py-2.5 rounded-lg transition-colors">
             Cerrar
           </button>
         )}
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -215,21 +232,25 @@ function fmtDate(ts) {
 
 function StatusFilterBar({ status, onChange, total, label }) {
   return (
-    <div className="flex flex-wrap gap-2 items-center">
-      {HIST_STATUS_OPTIONS.map(opt => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-            status === opt.value
-              ? 'bg-green-500 border-green-500 text-white'
-              : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-      <span className="text-gray-600 text-xs ml-auto">{total} {label}</span>
+    <div className="space-y-2">
+      <div className="-mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto scrollbar-none">
+        <div className="flex gap-2 w-max">
+          {HIST_STATUS_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => onChange(opt.value)}
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                status === opt.value
+                  ? 'bg-green-500 border-green-500 text-white'
+                  : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-gray-600 text-xs">{total} {label}</p>
     </div>
   )
 }
@@ -411,22 +432,14 @@ function HistorialTab() {
   const [histType, setHistType] = useState('clauses')
   return (
     <div className="space-y-4">
-      <div className="flex bg-gray-900 rounded-xl p-1 border border-gray-800 w-fit gap-1">
-        {[
+      <Tabs
+        tabs={[
           { id: 'clauses', label: 'Cláusulas y ofertas' },
           { id: 'swaps',   label: 'Intercambios' },
-        ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setHistType(t.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              histType === t.id ? 'bg-green-500 text-white' : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+        ]}
+        value={histType}
+        onChange={setHistType}
+      />
       {histType === 'clauses' && <ClauseHistTab />}
       {histType === 'swaps'   && <SwapHistTab />}
     </div>
@@ -583,9 +596,9 @@ export default function Market() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <div>
-        <h1 className="text-white text-2xl font-bold">Mercado</h1>
+        <h1 className="text-white text-xl sm:text-2xl font-bold">Mercado</h1>
         <p className="text-gray-400 text-sm mt-1">Tu presupuesto: {formatMoney(user?.budget)}</p>
       </div>
 
@@ -595,43 +608,23 @@ export default function Market() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex flex-wrap bg-gray-900 rounded-xl p-1 border border-gray-800 w-fit gap-1">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => handleTabChange(t.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-              tab === t.id ? 'bg-green-500 text-white' : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            {t.label}
-            {t.count > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                t.highlight ? 'bg-yellow-500 text-black font-bold' :
-                tab === t.id ? 'bg-white/20' : 'bg-gray-700'
-              }`}>
-                {t.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={tabs} value={tab} onChange={handleTabChange} />
 
       {/* Search + Filter bar */}
       {tab !== 'offers' && tab !== 'alloffer' && (
         <div className="space-y-3">
           <div className="flex gap-2">
             <input
-              type="text"
-              placeholder="Buscar por nombre, equipo o nacionalidad..."
+              type="search"
+              placeholder="Buscar jugador, equipo, país..."
               value={filters.search}
               onChange={e => setFilter('search', e.target.value)}
-              className="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-green-500 text-sm"
+              className="flex-1 min-w-0 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-green-500 text-sm"
             />
             <button
               onClick={() => setShowFilters(v => !v)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
+              aria-label="Filtros"
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
                 showFilters || hasActiveFilters
                   ? 'bg-green-500/20 border-green-500/50 text-green-400'
                   : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-600'
@@ -640,7 +633,7 @@ export default function Market() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
               </svg>
-              Filtros
+              <span className="hidden sm:inline">Filtros</span>
               {hasActiveFilters && (
                 <span className="bg-green-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center font-bold">
                   {Object.values(filters).filter(v => v !== '').length}
@@ -674,6 +667,7 @@ export default function Market() {
                   <div className="flex gap-1.5">
                     <input
                       type="number"
+                      inputMode="numeric"
                       placeholder="Mín"
                       min="1" max="99"
                       value={filters.ovrMin}
@@ -682,6 +676,7 @@ export default function Market() {
                     />
                     <input
                       type="number"
+                      inputMode="numeric"
                       placeholder="Máx"
                       min="1" max="99"
                       value={filters.ovrMax}
@@ -697,6 +692,7 @@ export default function Market() {
                   <div className="flex gap-1.5">
                     <input
                       type="number"
+                      inputMode="numeric"
                       placeholder="Precio mínimo"
                       min="0"
                       value={filters.priceMin}
@@ -705,6 +701,7 @@ export default function Market() {
                     />
                     <input
                       type="number"
+                      inputMode="numeric"
                       placeholder="Precio máximo"
                       min="0"
                       value={filters.priceMax}
@@ -849,11 +846,11 @@ export default function Market() {
                           </div>
                         </div>
                         {isRaised && o.new_clause_amount && (
-                          <div className="flex gap-2 mt-2">
-                            <button onClick={() => handleAcceptRaised(o.id)} className="bg-green-600 hover:bg-green-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                          <div className="flex gap-2 mt-2.5">
+                            <button onClick={() => handleAcceptRaised(o.id)} className="flex-1 sm:flex-none bg-green-600 hover:bg-green-500 text-white text-xs font-semibold px-3 py-2.5 sm:py-1.5 rounded-lg transition-colors">
                               Aceptar y pagar {formatMoney(o.new_clause_amount)}
                             </button>
-                            <button onClick={() => handleCancelOffer(o.id)} className="bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                            <button onClick={() => handleCancelOffer(o.id)} className="bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold px-4 sm:px-3 py-2.5 sm:py-1.5 rounded-lg transition-colors">
                               Retirarme
                             </button>
                           </div>
@@ -932,8 +929,7 @@ export default function Market() {
 
       {/* Buy / clause confirmation modal */}
       {confirmPlayer && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-sm border border-gray-700 shadow-2xl">
+        <Modal onClose={() => { setConfirmPlayer(null); setBuyError('') }}>
             <h3 className="text-white text-lg font-bold mb-1">
               {isClauseTab ? 'Activar cláusula' : 'Confirmar compra'}
             </h3>
@@ -985,8 +981,7 @@ export default function Market() {
                 Cancelar
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Swap modal */}
@@ -1000,8 +995,7 @@ export default function Market() {
 
       {/* Direct offer modal */}
       {directOfferPlayer && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 rounded-2xl p-6 w-full max-w-sm border border-gray-700 shadow-2xl">
+        <Modal onClose={() => { setDirectOfferPlayer(null); setDirectOfferAmt(''); setDirectOfferErr('') }}>
             <h3 className="text-white text-lg font-bold mb-1">Hacer oferta directa</h3>
             <p className="text-blue-300 text-xs mb-3 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
               El dueño puede aceptar o rechazar. Si rechaza, no perdés dinero.
@@ -1013,15 +1007,14 @@ export default function Market() {
               Cláusula: <span className="text-orange-400 font-bold">{formatMoney(directOfferPlayer.release_clause)}</span>
               {' · '}Tu oferta debe ser menor
             </p>
-            <input
-              type="number"
+            <MoneyInput
               placeholder="Monto de tu oferta"
               value={directOfferAmt}
               onChange={e => { setDirectOfferAmt(e.target.value); setDirectOfferErr('') }}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 mb-1"
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
             />
             {directOfferAmt && parseInt(directOfferAmt) > 0 && (
-              <div className="text-xs text-gray-500 mb-3">
+              <div className="text-xs text-gray-500 mt-0.5 mb-3">
                 Saldo restante: <span className={`font-bold ${(user?.budget || 0) - parseInt(directOfferAmt) < 0 ? 'text-red-400' : 'text-white'}`}>
                   {formatMoney((user?.budget || 0) - parseInt(directOfferAmt))}
                 </span>
@@ -1043,8 +1036,7 @@ export default function Market() {
                 Cancelar
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Own player action modal */}
