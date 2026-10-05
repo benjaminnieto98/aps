@@ -74,7 +74,7 @@ function PlayerCard({ player, onRefresh, config, rosterCount, minRoster, navigat
   }
 
   return (
-    <div className="bg-gray-800 rounded-xl p-3 border border-gray-700 hover:border-gray-600 transition-colors">
+    <div className="bg-gray-800 rounded-xl p-3 border border-gray-700 hover:border-gray-600 transition-all lg:hover:-translate-y-0.5 lg:hover:shadow-lg lg:hover:shadow-black/30">
       {/* Header */}
       <div className="flex items-start justify-between mb-1">
         <div className="flex-1 min-w-0">

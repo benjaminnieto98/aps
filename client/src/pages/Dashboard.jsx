@@ -334,6 +334,8 @@ export default function Dashboard() {
 
   if (loading) return <div className="text-gray-400 text-center py-20">Cargando...</div>
 
+  const hasNews = milestones.length > 0 || feed.length > 0
+
   return (
     <div className="space-y-5 sm:space-y-6">
       <div>
@@ -341,14 +343,21 @@ export default function Dashboard() {
         <p className="text-gray-400 text-sm mt-1">Bienvenido, {user?.username}</p>
       </div>
 
+      {/* Desktop: two columns (news left, my info right). Mobile: same stacked order as before. */}
+      <div className={`space-y-5 sm:space-y-6 lg:space-y-0 lg:grid lg:gap-6 lg:items-start ${hasNews ? 'lg:grid-cols-3' : ''}`}>
+      {hasNews && (
+      <div className="space-y-5 sm:space-y-6 lg:col-span-2">
       {/* Milestone carousel */}
       <MilestoneCarousel milestones={milestones} />
 
       {/* Activity feed */}
       <ActivityFeed feed={feed} />
+      </div>
+      )}
 
+      <div className="space-y-5 sm:space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className={`grid grid-cols-2 gap-3 sm:gap-4 ${hasNews ? '' : 'lg:grid-cols-4'}`}>
         <StatCard label="Presupuesto" value={formatMoneyShort(user?.budget)} sub={formatMoney(user?.budget)} />
         <StatCard label="Plantel" value={`${players.length}`} sub={`máximo ${config?.maxRoster ?? 22} jugadores`} />
         <StatCard label="Equipo" value={user?.team_name || '—'} sub="equipo asignado" />
@@ -359,7 +368,7 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${hasNews ? '' : 'lg:grid-cols-2'}`}>
         {/* Standings */}
         {activeTournament && standings.length > 0 && (
           <div className="bg-gray-900 rounded-xl border border-gray-800">
@@ -376,9 +385,9 @@ export default function Dashboard() {
                     <th className="px-2 sm:px-4 py-2 text-left">Equipo</th>
                     <th className="px-2 sm:px-4 py-2 text-center">PTS</th>
                     <th className="px-2 sm:px-4 py-2 text-center">PJ</th>
-                    <th className="hidden sm:table-cell px-4 py-2 text-center">G</th>
-                    <th className="hidden sm:table-cell px-4 py-2 text-center">E</th>
-                    <th className="hidden sm:table-cell px-4 py-2 text-center">P</th>
+                    <th className={`hidden sm:table-cell px-4 py-2 text-center ${hasNews ? 'lg:hidden' : ''}`}>G</th>
+                    <th className={`hidden sm:table-cell px-4 py-2 text-center ${hasNews ? 'lg:hidden' : ''}`}>E</th>
+                    <th className={`hidden sm:table-cell px-4 py-2 text-center ${hasNews ? 'lg:hidden' : ''}`}>P</th>
                     <th className="pl-2 pr-4 sm:px-4 py-2 text-center">DG</th>
                   </tr>
                 </thead>
@@ -392,9 +401,9 @@ export default function Dashboard() {
                       <td className="px-2 sm:px-4 py-2.5 text-white font-medium truncate max-w-[140px]">{s.name}</td>
                       <td className="px-2 sm:px-4 py-2.5 text-center text-green-400 font-bold">{s.pts}</td>
                       <td className="px-2 sm:px-4 py-2.5 text-center text-gray-400">{s.pj}</td>
-                      <td className="hidden sm:table-cell px-4 py-2.5 text-center text-gray-400">{s.g}</td>
-                      <td className="hidden sm:table-cell px-4 py-2.5 text-center text-gray-400">{s.e}</td>
-                      <td className="hidden sm:table-cell px-4 py-2.5 text-center text-gray-400">{s.p}</td>
+                      <td className={`hidden sm:table-cell px-4 py-2.5 text-center text-gray-400 ${hasNews ? 'lg:hidden' : ''}`}>{s.g}</td>
+                      <td className={`hidden sm:table-cell px-4 py-2.5 text-center text-gray-400 ${hasNews ? 'lg:hidden' : ''}`}>{s.e}</td>
+                      <td className={`hidden sm:table-cell px-4 py-2.5 text-center text-gray-400 ${hasNews ? 'lg:hidden' : ''}`}>{s.p}</td>
                       <td className="pl-2 pr-4 sm:px-4 py-2.5 text-center text-gray-400">{s.gd > 0 ? `+${s.gd}` : s.gd}</td>
                     </tr>
                   ))}
@@ -431,6 +440,8 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+      </div>
+      </div>
       </div>
     </div>
   )

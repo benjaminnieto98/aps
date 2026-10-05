@@ -79,10 +79,10 @@ function PlayerRow({ player, priceField, onBuy, isClause, onDirectOffer, onSwap,
             <div className="text-gray-600 text-xs truncate">Dueño: {player.owner_username}</div>
           )}
         </div>
-        <div className="text-right shrink-0">
-          <div className="text-green-400 font-bold text-sm">{formatMoney(player[priceField])}</div>
+        <div className="text-right shrink-0 md:w-32">
+          <div className="text-green-400 font-bold text-sm tabular-nums">{formatMoney(player[priceField])}</div>
         </div>
-        <div className="hidden md:flex items-center gap-2 shrink-0">
+        <div className="hidden md:flex items-center justify-end gap-2 shrink-0">
           {actions(false)}
         </div>
       </div>

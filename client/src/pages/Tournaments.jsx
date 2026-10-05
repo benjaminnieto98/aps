@@ -45,7 +45,7 @@ function StandingsTable({ matches, participants }) {
         </thead>
         <tbody>
           {sorted.map((s, i) => (
-            <tr key={s.id} className="border-b border-gray-800/40">
+            <tr key={s.id} className="border-b border-gray-800/40 lg:hover:bg-gray-800/30 transition-colors">
               <td className="pl-3 pr-1 sm:px-4 py-2.5 text-gray-400">{i + 1}</td>
               <td className="sticky left-0 bg-gray-900 px-2 sm:px-4 py-2.5 max-w-[130px] sm:max-w-none">
                 <div className="text-white font-medium truncate">{s.team_name || s.username}</div>
@@ -358,7 +358,7 @@ export default function Tournaments() {
               {matchesLoading ? (
                 <div className="text-gray-400 text-center py-8">Cargando partidos...</div>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
                   {Object.entries(groupedMatches).map(([round, roundMatches]) => (
                     <div key={round} className="bg-gray-900 rounded-xl border border-gray-800">
                       <div className="px-4 py-3 border-b border-gray-800">

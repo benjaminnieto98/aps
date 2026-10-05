@@ -391,7 +391,7 @@ export default function Stats() {
               </thead>
               <tbody>
                 {managers.map((m, i) => (
-                  <tr key={m.id} className="border-b border-gray-800/40 hover:bg-gray-800/30">
+                  <tr key={m.id} className="border-b border-gray-800/40 hover:bg-gray-800/30 transition-colors">
                     <td className="px-4 py-3">
                       {i < 3 ? <span className="text-lg">{['🥇','🥈','🥉'][i]}</span> : <span className="text-gray-500">{i+1}</span>}
                     </td>
@@ -519,7 +519,7 @@ export default function Stats() {
             </div>
 
             {/* W/D/L + ataque/defensa/clean sheets */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               <RecordCard label="Más victorias" accent="green">
                 <MiniRanking items={records?.mostWins} valueKey="wins" accent="green" format="number" />
               </RecordCard>

@@ -45,15 +45,42 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-dvh bg-gray-950 flex items-center justify-center p-4">
+    <div className="min-h-dvh bg-gray-950 lg:grid lg:grid-cols-2">
+      {/* Brand panel (desktop only) */}
+      <div className="hidden lg:flex relative overflow-hidden flex-col justify-between p-12 bg-gradient-to-br from-green-600 via-green-800 to-gray-950">
+        <svg className="absolute inset-0 w-full h-full opacity-[0.08]" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <g fill="none" stroke="white" strokeWidth="0.6">
+            <rect x="6" y="6" width="88" height="128" />
+            <line x1="6" y1="70" x2="94" y2="70" />
+            <circle cx="50" cy="70" r="12" />
+            <rect x="26" y="6" width="48" height="22" />
+            <rect x="26" y="112" width="48" height="22" />
+          </g>
+        </svg>
+        <div className="relative flex items-center gap-3">
+          <div className="w-11 h-11 bg-white/15 backdrop-blur rounded-xl flex items-center justify-center font-black text-white text-sm">APS</div>
+          <span className="text-white/90 font-semibold">Asociación de PES6</span>
+        </div>
+        <div className="relative">
+          <h2 className="text-white text-4xl font-black leading-tight">El mercado definitivo<br />de PES6</h2>
+          <ul className="mt-8 space-y-3 text-white/80">
+            <li className="flex items-center gap-3"><span className="text-xl">🛒</span> Fichajes, cláusulas e intercambios</li>
+            <li className="flex items-center gap-3"><span className="text-xl">🏆</span> Liga, Copa y Supercopa</li>
+            <li className="flex items-center gap-3"><span className="text-xl">📊</span> Estadísticas, records e historial</li>
+          </ul>
+        </div>
+        <p className="relative text-white/40 text-xs">Todos los lunes, nos vemos en la cancha.</p>
+      </div>
+
+      <div className="min-h-dvh flex items-center justify-center p-4 lg:p-12">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-2xl mb-4">
+        <div className="text-center mb-8 lg:text-left">
+          <div className="inline-flex lg:hidden items-center justify-center w-16 h-16 bg-green-500 rounded-2xl mb-4">
             <span className="text-white font-bold text-xl">APS</span>
           </div>
-          <h1 className="text-white text-2xl font-bold">Asociación de PES6</h1>
-          <p className="text-gray-400 text-sm mt-1">El mercado definitivo de PES6</p>
+          <h1 className="text-white text-2xl font-bold"><span className="lg:hidden">Asociación de PES6</span><span className="hidden lg:inline">Bienvenido de vuelta</span></h1>
+          <p className="text-gray-400 text-sm mt-1"><span className="lg:hidden">El mercado definitivo de PES6</span><span className="hidden lg:inline">Ingresá para gestionar tu equipo</span></p>
         </div>
 
         {/* Card */}
@@ -138,6 +165,7 @@ export default function Login() {
             </button>
           </form>
         </div>
+      </div>
       </div>
     </div>
   )
